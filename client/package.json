@@ -1,0 +1,52 @@
+{
+  "name": "client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mantine/core": "^7.17.2",
+    "@mantine/dates": "^7.17.2",
+    "@mantine/form": "^7.17.2",
+    "@mantine/hooks": "^7.17.2",
+    "@react-spring/three": "^9.7.5",
+    "@react-three/drei": "^10.0.4",
+    "@react-three/fiber": "^9.1.0",
+    "@react-three/postprocessing": "^3.0.4",
+    "@tailwindcss/forms": "^0.5.10",
+    "axios": "^1.8.4",
+    "date-fns": "^3.6.0",
+    "drei": "^2.2.21",
+    "framer-motion": "^12.5.0",
+    "gasp": "^0.0.2",
+    "gsap": "^3.12.7",
+    "leaflet": "^1.9.4",
+    "react": "^19.0.0",
+    "react-datepicker": "^6.9.0",
+    "react-dom": "^19.0.0",
+    "react-icons": "^5.5.0",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.4.0",
+    "react-toastify": "^11.0.5",
+    "tailwindcss": "^3.3.5",
+    "three": "^0.174.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^15.15.0",
+    "postcss": "^8.4.31",
+    "vite": "^6.2.0"
+  }
+}
