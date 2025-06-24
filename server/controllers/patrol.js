@@ -484,24 +484,49 @@ exports.getDashboardStats = async (req, res, next) => {
     const userRole = req.query.userRole;
     const userId = req.query.userId;
     
-    // Get active patrols count - filter by officer ID if officer role
+    // Get active patrols count - filter by role
     let activePatrols;
     if (userRole === 'officer') {
+      // Officer: only their assigned patrols
       activePatrols = await Patrol.countDocuments({ 
         status: 'in-progress',
         assignedOfficers: userId
       });
+    } else if (userRole === 'manager') {
+      // Manager: patrols assigned by them or all patrols (since no assignedBy field for officers yet)
+      activePatrols = await Patrol.countDocuments({ 
+        status: 'in-progress',
+        $or: [
+          { assignedBy: userId },
+          { assignedBy: { $exists: false } } // Include patrols without assignedBy for now
+        ]
+      });
     } else {
+      // Admin: all active patrols
       activePatrols = await Patrol.countDocuments({ status: 'in-progress' });
     }
     
-    // Get officers on duty count
-    const officersOnDuty = await User.countDocuments({ 
-      role: 'officer',
-      status: 'on-duty'
-    });
+    // Get officers on duty count - filter by role
+    let officersOnDuty;
+    if (userRole === 'officer') {
+      // Officer: just their own status
+      const user = await User.findById(userId);
+      officersOnDuty = user?.status === 'on-duty' ? 1 : 0;
+    } else if (userRole === 'manager') {
+      // Manager: all officers on duty (since no assignedBy field for officers yet)
+      officersOnDuty = await User.countDocuments({ 
+        role: 'officer',
+        status: 'on-duty'
+      });
+    } else {
+      // Admin: all officers on duty
+      officersOnDuty = await User.countDocuments({ 
+        role: 'officer',
+        status: 'on-duty'
+      });
+    }
     
-    // Get patrols today count - filter by officer ID if officer role
+    // Get patrols today count - filter by role
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     let patrolsToday;
@@ -510,21 +535,37 @@ exports.getDashboardStats = async (req, res, next) => {
         startTime: { $gte: today },
         assignedOfficers: userId
       });
+    } else if (userRole === 'manager') {
+      patrolsToday = await Patrol.countDocuments({
+        startTime: { $gte: today },
+        $or: [
+          { assignedBy: userId },
+          { assignedBy: { $exists: false } } // Include patrols without assignedBy for now
+        ]
+      });
     } else {
       patrolsToday = await Patrol.countDocuments({
         startTime: { $gte: today }
       });
     }
     
-    // Get total locations count
+    // Get total locations count - same for all roles
     const totalLocations = await Location.countDocuments();
     
-    // Get completed patrols count for officers
+    // Get completed patrols count - filter by role
     let completedPatrols;
     if (userRole === 'officer') {
       completedPatrols = await Patrol.countDocuments({
         status: 'completed',
         assignedOfficers: userId
+      });
+    } else if (userRole === 'manager') {
+      completedPatrols = await Patrol.countDocuments({
+        status: 'completed',
+        $or: [
+          { assignedBy: userId },
+          { assignedBy: { $exists: false } } // Include patrols without assignedBy for now
+        ]
       });
     } else {
       completedPatrols = await Patrol.countDocuments({
@@ -532,10 +573,17 @@ exports.getDashboardStats = async (req, res, next) => {
       });
     }
     
-    // Get recent patrols - filter by officer ID if officer role
+    // Get recent patrols - filter by role
     let recentPatrolsQuery = Patrol.find();
     if (userRole === 'officer') {
       recentPatrolsQuery = recentPatrolsQuery.find({ assignedOfficers: userId });
+    } else if (userRole === 'manager') {
+      recentPatrolsQuery = recentPatrolsQuery.find({
+        $or: [
+          { assignedBy: userId },
+          { assignedBy: { $exists: false } } // Include patrols without assignedBy for now
+        ]
+      });
     }
     
     const recentPatrols = await recentPatrolsQuery
@@ -544,10 +592,38 @@ exports.getDashboardStats = async (req, res, next) => {
       .sort('-startTime')
       .limit(5);
     
-    // Get officers list
-    const officers = await User.find({ role: 'officer' })
-      .select('name email status')
-      .limit(5);
+    // Get officers list - filter by role
+    let officers;
+    if (userRole === 'officer') {
+      // Officer: just their own info
+      const user = await User.findById(userId).select('name email status');
+      officers = user ? [user] : [];
+    } else if (userRole === 'manager') {
+      // Manager: all officers (since no assignedBy field for officers yet)
+      officers = await User.find({ role: 'officer' })
+        .select('name email status')
+        .limit(5);
+    } else {
+      // Admin: all officers
+      officers = await User.find({ role: 'officer' })
+        .select('name email status')
+        .limit(5);
+    }
+    
+    // Get total patrols count - filter by role
+    let totalPatrols;
+    if (userRole === 'officer') {
+      totalPatrols = await Patrol.countDocuments({ assignedOfficers: userId });
+    } else if (userRole === 'manager') {
+      totalPatrols = await Patrol.countDocuments({
+        $or: [
+          { assignedBy: userId },
+          { assignedBy: { $exists: false } } // Include patrols without assignedBy for now
+        ]
+      });
+    } else {
+      totalPatrols = await Patrol.countDocuments();
+    }
     
     res.status(200).json({
       success: true,
@@ -557,8 +633,10 @@ exports.getDashboardStats = async (req, res, next) => {
         patrolsToday,
         totalLocations,
         completedPatrols,
+        totalPatrols,
         recentPatrols,
-        officers
+        officers,
+        userRole // Include user role for frontend to use
       }
     });
   } catch (error) {

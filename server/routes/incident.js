@@ -19,7 +19,16 @@ router.use(authenticateUser);
 
 // Special routes that should come before the ID routes
 // Stats route
-router.get('/stats', getIncidentStats);
+router.get('/stats', (req, res) => {
+  // Pass user information as query parameters
+  if (req.user) {
+    req.query.userRole = req.user.role;
+    req.query.userId = req.user.id || req.user._id;
+  }
+  
+  // Call the controller function
+  getIncidentStats(req, res);
+});
 
 // Main CRUD routes for collection
 router.route('/')

@@ -24,13 +24,10 @@ const StatCard = ({ title, value, icon, color = 'blue', className = '' }) => {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const { currentUser, hasRole } = useAuth();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [activePatrols, setActivePatrols] = useState([]);
-  
-  const isAdmin = hasRole(['admin', 'manager']);
-  const isOfficer = hasRole('officer');
   
   // Fetch dashboard data
   useEffect(() => {
@@ -102,14 +99,14 @@ const DashboardPage = () => {
         
         <div className="flex flex-wrap gap-3">
           <button 
-            onClick={() => navigate(isOfficer ? '/my-patrols' : '/patrols')}
+            onClick={() => navigate(dashboardData?.userRole === 'officer' ? '/my-patrols' : '/patrols')}
             className="btn-primary"
           >
-            {isOfficer ? 'View My Patrols' : 'View All Patrols'}
+            {dashboardData?.userRole === 'officer' ? 'View My Patrols' : 'View All Patrols'}
           </button>
           
           {/* Only show Assign New Patrol button for admins and managers */}
-          {isAdmin && (
+          {dashboardData?.userRole !== 'officer' && (
             <button 
               onClick={() => navigate('/assign-patrol')}
               className="btn-outline"
@@ -123,7 +120,7 @@ const DashboardPage = () => {
       {/* Quick Stats Section - show role-appropriate stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title={isOfficer ? "My Active Patrols" : "Active Patrols"} 
+          title={dashboardData?.userRole === 'officer' ? "My Active Patrols" : "Active Patrols"} 
           value={dashboardData?.activePatrols || 0}
           icon={
             <svg className="h-6 w-6 text-blue-300" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -133,7 +130,7 @@ const DashboardPage = () => {
         />
         
         {/* Show officers on duty stat only for admin/manager */}
-        {isAdmin ? (
+        {dashboardData?.userRole !== 'officer' ? (
           <StatCard 
             title="Officers on Duty" 
             value={dashboardData?.officersOnDuty || 0}
@@ -160,7 +157,7 @@ const DashboardPage = () => {
         )}
         
         <StatCard 
-          title={isOfficer ? "My Patrols Today" : "Patrols Today"} 
+          title={dashboardData?.userRole === 'officer' ? "My Patrols Today" : "Patrols Today"} 
           value={dashboardData?.patrolsToday || 0}
           icon={
             <svg className="h-6 w-6 text-purple-300" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -171,7 +168,7 @@ const DashboardPage = () => {
           color="purple"
         />
         
-        {isAdmin ? (
+        {dashboardData?.userRole === 'admin' ? (
           <StatCard 
             title="Total Locations" 
             value={dashboardData?.totalLocations || 0}
@@ -203,7 +200,7 @@ const DashboardPage = () => {
         <div className="card-glass border border-blue-900/30 rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500">
-              {isOfficer ? "My Active Patrol Location" : "Active Patrol Locations"}
+              {dashboardData?.userRole === 'officer' ? "My Active Patrol Location" : "Active Patrol Locations"}
             </h2>
           </div>
           <div className="h-[400px] rounded-lg overflow-hidden">
@@ -218,7 +215,7 @@ const DashboardPage = () => {
         </div>
         
         {/* Incident Statistics */}
-        <IncidentStats isOfficerView={isOfficer} />
+        <IncidentStats />
       </div>
       
       {/* Recent Patrols & Officers Sections */}
@@ -227,10 +224,10 @@ const DashboardPage = () => {
         <div className="card-glass border border-blue-900/30 rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500">
-              {isOfficer ? "My Recent Patrols" : "Recent Patrols"}
+              {dashboardData?.userRole === 'officer' ? "My Recent Patrols" : "Recent Patrols"}
             </h2>
             <Link 
-              to={isOfficer ? "/my-patrols" : "/patrols"}
+              to={dashboardData?.userRole === 'officer' ? "/my-patrols" : "/patrols"}
               className="btn-sm-outline"
             >
               View All
@@ -272,7 +269,7 @@ const DashboardPage = () => {
         </div>
         
         {/* Officers - Only show for admin/manager */}
-        {isAdmin ? (
+        {dashboardData?.userRole !== 'officer' ? (
           <div className="card-glass border border-blue-900/30 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500">
