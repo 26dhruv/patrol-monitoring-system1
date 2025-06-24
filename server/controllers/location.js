@@ -1,10 +1,84 @@
 const Location = require('../models/Location');
+const geocodingService = require('../services/geocoding');
 
-// @desc    Create a new location
+// @desc    Geocode a place name to coordinates
+// @route   POST /api/locations/geocode
+// @access  Private (Admin, Manager)
+exports.geocodePlace = async (req, res, next) => {
+  try {
+    const { placeName, region = 'Ahmedabad, Gujarat, India' } = req.body;
+
+    if (!placeName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Place name is required'
+      });
+    }
+
+    const geocodeResult = await geocodingService.geocode(placeName, region);
+
+    res.status(200).json({
+      success: true,
+      data: geocodeResult
+    });
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+// @desc    Create a new location with optional geocoding
 // @route   POST /api/locations
 // @access  Private (Admin, Manager)
 exports.createLocation = async (req, res, next) => {
   try {
+    const { name, description, locationType, geocodePlace, coordinates, address } = req.body;
+
+    // If geocodePlace is provided, geocode it first
+    if (geocodePlace && (!coordinates || !coordinates.latitude || !coordinates.longitude)) {
+      try {
+        const geocodeResult = await geocodingService.geocode(geocodePlace);
+        
+        // Validate that the coordinates are within Ahmedabad district
+        if (!geocodingService.isWithinAhmedabadDistrict(geocodeResult.latitude, geocodeResult.longitude)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Location must be within Ahmedabad district, Gujarat'
+          });
+        }
+
+        // Use geocoded coordinates and address
+        req.body.coordinates = {
+          latitude: geocodeResult.latitude,
+          longitude: geocodeResult.longitude
+        };
+        req.body.address = geocodeResult.address;
+        
+        console.log(`Geocoded "${geocodePlace}" to: ${geocodeResult.latitude}, ${geocodeResult.longitude}`);
+      } catch (geocodeError) {
+        return res.status(400).json({
+          success: false,
+          error: `Failed to geocode place: ${geocodeError.message}`
+        });
+      }
+    } else if (coordinates && coordinates.latitude && coordinates.longitude) {
+      // Validate manually entered coordinates are within Ahmedabad district
+      if (!geocodingService.isWithinAhmedabadDistrict(coordinates.latitude, coordinates.longitude)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Coordinates must be within Ahmedabad district, Gujarat'
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either geocodePlace or coordinates (latitude and longitude) must be provided'
+      });
+    }
+
     // Add user to req.body
     req.body.createdBy = req.user.userId;
 

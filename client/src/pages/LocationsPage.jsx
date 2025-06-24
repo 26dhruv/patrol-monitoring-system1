@@ -19,12 +19,14 @@ const LocationsPage = () => {
       latitude: '',
       longitude: ''
     },
-    address: ''
+    address: '',
+    geocodePlace: ''
   });
   
   const [formError, setFormError] = useState(null);
   const [formSuccess, setFormSuccess] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   
   // Filter state
   const [activeFilter, setActiveFilter] = useState('all');
@@ -70,6 +72,38 @@ const LocationsPage = () => {
     }
   };
   
+  // Handle geocoding
+  const handleGeocode = async () => {
+    if (!formData.geocodePlace.trim()) {
+      setFormError('Please enter a place name to geocode');
+      return;
+    }
+
+    try {
+      setIsGeocoding(true);
+      setFormError(null);
+
+      const response = await locationService.geocode(formData.geocodePlace);
+      const { latitude, longitude, address } = response.data.data;
+
+      setFormData(prev => ({
+        ...prev,
+        coordinates: {
+          latitude: latitude.toString(),
+          longitude: longitude.toString()
+        },
+        address: address
+      }));
+
+      setFormSuccess(`Successfully geocoded "${formData.geocodePlace}" to coordinates: ${latitude}, ${longitude}`);
+    } catch (err) {
+      console.error('Geocoding error:', err);
+      setFormError(err.response?.data?.error || 'Failed to geocode place. Please try again.');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+  
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -108,7 +142,8 @@ const LocationsPage = () => {
           latitude: '',
           longitude: ''
         },
-        address: ''
+        address: '',
+        geocodePlace: ''
       });
       
       setFormSuccess('Location created successfully!');
@@ -226,25 +261,62 @@ const LocationsPage = () => {
                 />
               </div>
               
-              <div>
-                <label htmlFor="locationType" className="block text-sm font-medium text-blue-300 mb-1">
-                  Location Type
-                </label>
-                <select
-                  id="locationType"
-                  name="locationType"
-                  value={formData.locationType}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  <option value="checkpoint">Checkpoint</option>
-                  <option value="building">Building</option>
-                  <option value="entrance">Entrance</option>
-                  <option value="perimeter">Perimeter</option>
-                  <option value="area">Area</option>
-                  <option value="other">Other</option>
-                </select>
+              {/* Geocoding Section */}
+              <div className="bg-[#0a1c30]/30 border border-blue-900/30 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-blue-300 mb-3">📍 Geocoding (Ahmedabad District)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="md:col-span-2">
+                    <label htmlFor="geocodePlace" className="block text-sm font-medium text-blue-300 mb-1">
+                      Place Name
+                    </label>
+                    <input
+                      type="text"
+                      id="geocodePlace"
+                      name="geocodePlace"
+                      value={formData.geocodePlace}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm placeholder-blue-400/50 text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="e.g., Satellite Ahmedabad, Law Garden, etc."
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={handleGeocode}
+                      disabled={isGeocoding || !formData.geocodePlace.trim()}
+                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/50 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors duration-200"
+                    >
+                      {isGeocoding ? 'Geocoding...' : 'Get Coordinates'}
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-blue-400">
+                  💡 Tip: Enter place names like "Satellite Ahmedabad", "Law Garden", "ISRO", etc. to automatically get coordinates.
+                </div>
               </div>
+            </div>
+            
+            <div>
+              <label htmlFor="locationType" className="block text-sm font-medium text-blue-300 mb-1">
+                Location Type
+              </label>
+              <select
+                id="locationType"
+                name="locationType"
+                value={formData.locationType}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="checkpoint">Checkpoint</option>
+                <option value="building">Building</option>
+                <option value="entrance">Entrance</option>
+                <option value="perimeter">Perimeter</option>
+                <option value="area">Area</option>
+                <option value="other">Other</option>
+              </select>
             </div>
             
             <div>

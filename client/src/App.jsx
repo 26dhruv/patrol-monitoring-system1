@@ -17,9 +17,10 @@ import AssignPatrolPage from './pages/AssignPatrolPage';
 import IncidentsPage from './pages/IncidentsPage';
 import IncidentDetailPage from './pages/IncidentDetailPage';
 import IncidentFormPage from './pages/IncidentFormPage';
-import LocationsPage from './pages/LocationsPage';
+import PatrolRoutesPage from './pages/PatrolRoutesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import AISchedulerPage from './pages/AISchedulerPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
@@ -79,8 +80,9 @@ function App() {
               <Route path="/patrols/:id/edit" element={<AssignPatrolPage />} />
               <Route path="/patrols/:id/assign-officers" element={<AssignPatrolPage assignOfficersOnly />} />
               <Route path="/patrols/:id/checkpoints" element={<AssignPatrolPage checkpointsOnly />} />
-              <Route path="/locations" element={<LocationsPage />} />
+              <Route path="/patrol-routes" element={<PatrolRoutesPage />} />
               <Route path="/incidents/:id/edit" element={<IncidentFormPage />} />
+              <Route path="/ai-scheduler" element={<AISchedulerPage />} />
             </Route>
           </Route>
           

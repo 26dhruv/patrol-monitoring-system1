@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { patrolService, userService, locationService } from '../services/api';
+import { patrolService, userService, patrolRouteService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
@@ -9,7 +9,7 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialOfficerId = searchParams.get('officer');
-  const { hasRole, currentUser } = useAuth();
+  const { hasRole } = useAuth();
   
   const isEditMode = !!id;
   
@@ -21,7 +21,9 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     endTime: '',
     status: 'scheduled',
     assignedOfficers: [],
-    checkpoints: [],
+    patrolRoute: '',
+    priority: 'medium',
+    notes: ''
   });
   
   // Loading states
@@ -34,14 +36,15 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
   const [officers, setOfficers] = useState([]);
   const [loadingOfficers, setLoadingOfficers] = useState(true);
   
-  // Available locations
-  const [locations, setLocations] = useState([]);
-  const [loadingLocations, setLoadingLocations] = useState(true);
+  // Available patrol routes
+  const [patrolRoutes, setPatrolRoutes] = useState([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(true);
+  const [selectedRoute, setSelectedRoute] = useState(null);
 
   // Tab navigation
   const [currentTab, setCurrentTab] = useState(
     assignOfficersOnly ? 'officers' : 
-    checkpointsOnly ? 'checkpoints' : 
+    checkpointsOnly ? 'routes' : 
     'details'
   );
   
@@ -70,6 +73,11 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
         };
         
         setFormData(formattedData);
+        
+        // Set selected route if patrol has a route
+        if (patrolData.patrolRoute) {
+          setSelectedRoute(patrolData.patrolRoute);
+        }
         
       } catch (err) {
         console.error('Error fetching patrol data:', err);
@@ -108,21 +116,21 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     fetchOfficers();
   }, [initialOfficerId, isEditMode]);
   
-  // Fetch available locations
+  // Fetch available patrol routes
   useEffect(() => {
-    const fetchLocations = async () => {
+    const fetchPatrolRoutes = async () => {
       try {
-        setLoadingLocations(true);
-        const response = await locationService.getAllLocations();
-        setLocations(response.data.data);
+        setLoadingRoutes(true);
+        const response = await patrolRouteService.getAllPatrolRoutes({ isActive: true });
+        setPatrolRoutes(response.data.data);
       } catch (err) {
-        console.error('Error fetching locations:', err);
+        console.error('Error fetching patrol routes:', err);
       } finally {
-        setLoadingLocations(false);
+        setLoadingRoutes(false);
       }
     };
     
-    fetchLocations();
+    fetchPatrolRoutes();
   }, []);
   
   // Handle form input changes
@@ -150,30 +158,13 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     });
   };
   
-  // Handle checkpoint selection
-  const handleCheckpointToggle = (locationId) => {
-    setFormData(prev => {
-      const isSelected = prev.checkpoints.includes(locationId);
-      
-      if (isSelected) {
-        return {
-          ...prev,
-          checkpoints: prev.checkpoints.filter(id => id !== locationId)
-        };
-      } else {
-        return {
-          ...prev,
-          checkpoints: [...prev.checkpoints, locationId]
-        };
-      }
-    });
-  };
-  
-  // Add custom checkpoint
-  const handleAddCustomCheckpoint = (e) => {
-    e.preventDefault();
-    // Implementation for custom checkpoints would go here
-    // This would typically involve a modal with a map to select coordinates
+  // Handle patrol route selection
+  const handleRouteSelection = (routeId) => {
+    setFormData(prev => ({ ...prev, patrolRoute: routeId }));
+    
+    // Set selected route for display
+    const route = patrolRoutes.find(r => r._id === routeId);
+    setSelectedRoute(route);
   };
   
   // Form validation
@@ -203,8 +194,8 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
       return false;
     }
     
-    if (formData.checkpoints.length === 0) {
-      setError('Please add at least one checkpoint');
+    if (!formData.patrolRoute) {
+      setError('Please select a patrol route');
       return false;
     }
     
@@ -215,6 +206,7 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setSuccess(false);
     
     if (!validateForm()) {
       return;
@@ -223,62 +215,28 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     try {
       setSaving(true);
       
-      console.log('Current user:', currentUser); // Debug the user object
-      
-      // Simple direct approach - create a clean object with exactly what we need
       const patrolData = {
-        title: formData.title,
-        description: formData.description,
-        status: formData.status,
+        ...formData,
         startTime: new Date(formData.startTime).toISOString(),
-        endTime: formData.endTime 
-          ? new Date(formData.endTime).toISOString() 
-          : new Date(new Date(formData.startTime).getTime() + 86400000).toISOString(),
-        assignedOfficers: formData.assignedOfficers,
-        // Using checkpoints as the locations array (same data)
-        locations: formData.checkpoints,
-        // Keep the checkpoints as simple location IDs - let the server handle the rest
-        checkpoints: formData.checkpoints.map(id => ({ location: id })),
-        // IMPORTANT: Include assignedBy field - this is required by the database
-        assignedBy: currentUser?.id || currentUser?._id // Use either id or _id depending on what's available
+        endTime: formData.endTime ? new Date(formData.endTime).toISOString() : null,
       };
       
-      // Log what we're about to send
-      console.log('Sending patrol data:', patrolData);
-      
-      let response;
       if (isEditMode) {
-        console.log(`Updating patrol with ID: ${id}`);
-        response = await patrolService.updatePatrol(id, patrolData);
+        await patrolService.updatePatrol(id, patrolData);
+        setSuccess('Patrol updated successfully!');
       } else {
-        console.log('Creating new patrol');
-        response = await patrolService.createPatrol(patrolData);
+        await patrolService.createPatrol(patrolData);
+        setSuccess('Patrol assigned successfully!');
       }
       
-      console.log('API response:', response);
-      setSuccess(true);
-      
-      // Navigate back to patrols list after success
+      // Redirect after a short delay
       setTimeout(() => {
         navigate('/patrols');
-      }, 2000);
+      }, 1500);
       
     } catch (err) {
       console.error('Error saving patrol:', err);
-      
-      // More detailed error info
-      if (err.response) {
-        console.error('Status:', err.response.status);
-        console.error('Data:', err.response.data);
-        console.error('Headers:', err.response.headers);
-        setError(err.response.data?.error || 'Server error. See console for details.');
-      } else if (err.request) {
-        console.error('Request was made but no response received');
-        setError('No response from server. Check your connection.');
-      } else {
-        console.error('Error message:', err.message);
-        setError(`Error: ${err.message}`);
-      }
+      setError(err.response?.data?.error || 'Failed to save patrol. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -289,12 +247,12 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     if (currentTab === 'details') {
       setCurrentTab('officers');
     } else if (currentTab === 'officers') {
-      setCurrentTab('checkpoints');
+      setCurrentTab('routes');
     }
   };
   
   const handlePrevTab = () => {
-    if (currentTab === 'checkpoints') {
+    if (currentTab === 'routes') {
       setCurrentTab('officers');
     } else if (currentTab === 'officers') {
       setCurrentTab('details');
@@ -333,7 +291,7 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
       {/* Success message */}
       {success && (
         <div className="bg-green-900/20 border border-green-500/30 text-green-400 px-4 py-3 rounded-md mb-4">
-          Patrol {isEditMode ? 'updated' : 'created'} successfully! Redirecting...
+          {success}
         </div>
       )}
       
@@ -374,14 +332,14 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
           <button
             type="button"
             className={`${
-              currentTab === 'checkpoints'
+              currentTab === 'routes'
                 ? 'border-blue-500 text-blue-300'
                 : 'border-transparent text-blue-400 hover:text-blue-300 hover:border-blue-800/50'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            onClick={() => setCurrentTab('checkpoints')}
+            onClick={() => setCurrentTab('routes')}
             disabled={assignOfficersOnly}
           >
-            Checkpoints
+            Patrol Routes
           </button>
         </nav>
       </div>
@@ -550,37 +508,37 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
                 className="btn-primary"
                 onClick={handleNextTab}
               >
-                Next: Checkpoints
+                Next: Patrol Routes
               </button>
             </div>
           </div>
         )}
         
-        {/* Checkpoints Tab */}
-        {currentTab === 'checkpoints' && (
+        {/* Patrol Routes Tab */}
+        {currentTab === 'routes' && (
           <div className="card-glass border border-blue-900/30 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-blue-300 mb-4">Select Checkpoints</h2>
+            <h2 className="text-xl font-semibold text-blue-300 mb-4">Select Patrol Route</h2>
             
-            {loadingLocations ? (
+            {loadingRoutes ? (
               <div className="flex justify-center py-4">
                 <Spinner size="md" />
               </div>
-            ) : locations.length === 0 ? (
+            ) : patrolRoutes.length === 0 ? (
               <div className="py-4 text-center text-blue-400">
-                No checkpoints available. Please add locations first.
+                No patrol routes available. Please add routes first.
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {locations.map(location => (
+                  {patrolRoutes.map(route => (
                     <div
-                      key={location._id}
+                      key={route._id}
                       className={`rounded-lg p-4 cursor-pointer transition-colors duration-200 ${
-                        formData.checkpoints.includes(location._id)
+                        formData.patrolRoute === route._id
                           ? 'border border-blue-500/50 bg-blue-900/30'
                           : 'border border-blue-900/30 bg-[#071425]/50 hover:bg-[#0a1c30]/50'
                       }`}
-                      onClick={() => handleCheckpointToggle(location._id)}
+                      onClick={() => handleRouteSelection(route._id)}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="flex-shrink-0">
@@ -593,19 +551,17 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-blue-200 truncate">
-                            {location.name}
+                            {route.name}
                           </p>
                           <p className="text-sm text-blue-400 truncate">
-                            {location.address || (location.coordinates ? 
-                              `${location.coordinates.latitude.toFixed(4)}, ${location.coordinates.longitude.toFixed(4)}` : 
-                              'Coordinates not available')}
+                            {route.description || 'No description available'}
                           </p>
                         </div>
                         <div className="flex-shrink-0">
                           <input
                             type="checkbox"
                             className="form-checkbox text-blue-500 border-blue-700 rounded focus:ring-blue-500 focus:ring-offset-blue-900"
-                            checked={formData.checkpoints.includes(location._id)}
+                            checked={formData.patrolRoute === route._id}
                             onChange={() => {}} // Handled by the onClick on the div
                             onClick={e => e.stopPropagation()}
                           />
@@ -613,27 +569,12 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
                       </div>
                     </div>
                   ))}
-                  
-                  {/* Add custom checkpoint button */}
-                  <div
-                    className="border border-dashed border-blue-900/30 rounded-lg p-4 cursor-pointer hover:bg-[#0a1c30]/50 flex items-center justify-center transition-colors duration-200"
-                    onClick={handleAddCustomCheckpoint}
-                  >
-                    <div className="text-center">
-                      <svg className="mx-auto h-12 w-12 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      <span className="mt-2 block text-sm font-medium text-blue-300">
-                        Add Custom Checkpoint
-                      </span>
-                    </div>
-                  </div>
                 </div>
                 
                 <div className="mt-2 text-sm text-blue-400">
-                  {formData.checkpoints.length === 0
-                    ? 'No checkpoints selected'
-                    : `${formData.checkpoints.length} checkpoint${formData.checkpoints.length !== 1 ? 's' : ''} selected`}
+                  {formData.patrolRoute ? (
+                    `Selected route: ${selectedRoute.name}`
+                  ) : 'No route selected'}
                 </div>
               </div>
             )}

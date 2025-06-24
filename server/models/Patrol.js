@@ -19,13 +19,11 @@ const PatrolSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    locations: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Location',
-        required: true,
-      },
-    ],
+    patrolRoute: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PatrolRoute',
+      required: true,
+    },
     startTime: {
       type: Date,
       required: [true, 'Please provide patrol start time'],
@@ -48,11 +46,15 @@ const PatrolSchema = new mongoose.Schema(
       enum: ['low', 'medium', 'high', 'urgent'],
       default: 'medium',
     },
-    checkpoints: [
+    checkpointProgress: [
       {
-        location: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Location',
+        checkpointId: {
+          type: String, // Reference to checkpoint within the route
+          required: true,
+        },
+        checkpointName: {
+          type: String,
+          required: true,
         },
         requiredTime: {
           type: Date,
@@ -62,11 +64,26 @@ const PatrolSchema = new mongoose.Schema(
         },
         status: {
           type: String,
-          enum: ['pending', 'completed', 'missed'],
+          enum: ['pending', 'completed', 'missed', 'skipped'],
           default: 'pending',
+        },
+        completedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
         },
         notes: {
           type: String,
+        },
+        photos: [String], // Array of photo URLs
+        signature: String, // Signature data if required
+        qrCodeScanned: {
+          type: Boolean,
+          default: false,
+        },
+        location: {
+          latitude: Number,
+          longitude: Number,
+          accuracy: Number,
         },
       },
     ],
@@ -74,6 +91,20 @@ const PatrolSchema = new mongoose.Schema(
       type: String,
       enum: ['daily', 'weekly', 'bi-weekly', 'monthly', 'none'],
       default: 'none',
+    },
+    actualStartTime: {
+      type: Date,
+    },
+    actualEndTime: {
+      type: Date,
+    },
+    totalDistance: {
+      type: Number, // in meters
+      default: 0,
+    },
+    actualDuration: {
+      type: Number, // in minutes
+      default: 0,
     },
   },
   { timestamps: true }

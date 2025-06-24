@@ -83,10 +83,10 @@ const IncidentSchema = new Schema({
     type: String,
     trim: true
   },
-  location: {
-    type: Schema.Types.ObjectId,
-    ref: 'Location',
-    required: [true, 'Please provide incident location']
+  area: {
+    type: String,
+    required: [true, 'Please provide incident area name'],
+    trim: true
   },
   category: {
     type: String,

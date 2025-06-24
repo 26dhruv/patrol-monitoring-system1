@@ -1,7 +1,7 @@
 const Patrol = require('../models/Patrol');
 const PatrolLog = require('../models/PatrolLog');
 const User = require('../models/User');
-const Location = require('../models/Location');
+const PatrolRoute = require('../models/PatrolRoute');
 const mongoose = require('mongoose');
 
 // @desc    Create a new patrol
@@ -11,6 +11,25 @@ exports.createPatrol = async (req, res, next) => {
   try {
     // Add assignedBy as the current user
     req.body.assignedBy = req.user.userId;
+
+    // Validate that the patrol route exists
+    if (req.body.patrolRoute) {
+      const route = await PatrolRoute.findById(req.body.patrolRoute);
+      if (!route) {
+        return res.status(400).json({
+          success: false,
+          error: 'Patrol route not found'
+        });
+      }
+
+      // Initialize checkpoint progress based on the route
+      req.body.checkpointProgress = route.checkpoints.map((checkpoint, index) => ({
+        checkpointId: checkpoint._id.toString(),
+        checkpointName: checkpoint.name,
+        status: 'pending',
+        order: checkpoint.order
+      }));
+    }
 
     const patrol = await Patrol.create(req.body);
 
@@ -96,7 +115,7 @@ exports.getPatrols = async (req, res, next) => {
     query = Patrol.find(parsedQuery)
       .populate('assignedOfficers', 'name email badgeNumber')
       .populate('assignedBy', 'name email')
-      .populate('locations', 'name coordinates');
+      .populate('patrolRoute', 'name description checkpoints');
 
     // Select fields
     if (req.query.select) {
@@ -170,7 +189,7 @@ exports.getPatrol = async (req, res, next) => {
     const patrol = await Patrol.findById(req.params.id)
       .populate('assignedOfficers', 'name email badgeNumber')
       .populate('assignedBy', 'name email')
-      .populate('locations', 'name coordinates');
+      .populate('patrolRoute', 'name description checkpoints');
 
     if (!patrol) {
       return res.status(404).json({
@@ -182,7 +201,6 @@ exports.getPatrol = async (req, res, next) => {
     // Get patrol logs
     const logs = await PatrolLog.find({ patrol: req.params.id })
       .populate('officer', 'name')
-      .populate('location', 'name')
       .sort('-timestamp');
 
     res.status(200).json({
@@ -311,7 +329,7 @@ exports.startPatrol = async (req, res, next) => {
     await PatrolLog.create({
       patrol: req.params.id,
       officer: req.user.userId,
-      location: patrol.locations[0], // First location in the route
+      location: patrol.patrolRoute.checkpoints[0], // First checkpoint in the route
       action: 'check-in',
       description: 'Patrol started',
       coordinates: req.body.coordinates
@@ -381,8 +399,8 @@ exports.completeCheckpoint = async (req, res, next) => {
     }
 
     // Find the checkpoint in the patrol
-    const checkpointIndex = patrol.checkpoints.findIndex(
-      cp => cp._id.toString() === req.params.checkpointId
+    const checkpointIndex = patrol.checkpointProgress.findIndex(
+      cp => cp.checkpointId === req.params.checkpointId
     );
 
     if (checkpointIndex === -1) {
@@ -393,9 +411,9 @@ exports.completeCheckpoint = async (req, res, next) => {
     }
 
     // Update the checkpoint status
-    patrol.checkpoints[checkpointIndex].status = 'completed';
-    patrol.checkpoints[checkpointIndex].actualTime = new Date();
-    patrol.checkpoints[checkpointIndex].notes = req.body.notes || '';
+    patrol.checkpointProgress[checkpointIndex].status = 'completed';
+    patrol.checkpointProgress[checkpointIndex].actualTime = new Date();
+    patrol.checkpointProgress[checkpointIndex].notes = req.body.notes || '';
 
     await patrol.save();
 
@@ -403,7 +421,7 @@ exports.completeCheckpoint = async (req, res, next) => {
     await PatrolLog.create({
       patrol: req.params.id,
       officer: req.user.userId,
-      location: patrol.checkpoints[checkpointIndex].location,
+      location: patrol.patrolRoute.checkpoints[checkpointIndex],
       action: 'check-in',
       description: req.body.notes || 'Checkpoint completed',
       coordinates: req.body.coordinates
@@ -453,7 +471,7 @@ exports.completePatrol = async (req, res, next) => {
     await PatrolLog.create({
       patrol: req.params.id,
       officer: req.user.userId,
-      location: patrol.locations[patrol.locations.length - 1], // Last location in the route
+      location: patrol.patrolRoute.checkpoints[patrol.patrolRoute.checkpoints.length - 1], // Last checkpoint in the route
       action: 'check-out',
       description: req.body.notes || 'Patrol completed',
       coordinates: req.body.coordinates
@@ -550,7 +568,7 @@ exports.getDashboardStats = async (req, res, next) => {
     }
     
     // Get total locations count - same for all roles
-    const totalLocations = await Location.countDocuments();
+    const totalLocations = await PatrolRoute.countDocuments();
     
     // Get completed patrols count - filter by role
     let completedPatrols;
@@ -588,7 +606,7 @@ exports.getDashboardStats = async (req, res, next) => {
     
     const recentPatrols = await recentPatrolsQuery
       .populate('assignedOfficers', 'name')
-      .populate('locations', 'name')
+      .populate('patrolRoute', 'name')
       .sort('-startTime')
       .limit(5);
     
@@ -666,8 +684,8 @@ exports.getActivePatrols = async (req, res, next) => {
     
     const activePatrols = await Patrol.find(query)
       .populate('assignedOfficers', 'name')
-      .populate('location', 'name coordinates')
-      .select('location assignedOfficers status startTime');
+      .populate('patrolRoute', 'name')
+      .select('patrolRoute assignedOfficers status startTime');
     
     res.status(200).json({
       success: true,

@@ -23,20 +23,24 @@ app.use(cors());
 // Import routes
 const authRoutes = require('./routes/auth');
 const patrolRoutes = require('./routes/patrol');
+const patrolRouteRoutes = require('./routes/patrolRoute');
 const userRoutes = require('./routes/user');
 const locationRoutes = require('./routes/location');
 const incidentRoutes = require('./routes/incident');
 const settingsRoutes = require('./routes/settings');
 const reportRoutes = require('./routes/reports');
+const aiSchedulerRoutes = require('./routes/aiScheduler');
 
 // Use routes
 app.use('/api/auth', authRoutes);
 app.use('/api/patrol', patrolRoutes);
+app.use('/api/patrol-routes', patrolRouteRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/ai-scheduler', aiSchedulerRoutes);
 
 // Root route
 app.get('/', (req, res) => {

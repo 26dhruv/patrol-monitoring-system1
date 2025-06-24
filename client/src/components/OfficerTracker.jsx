@@ -82,7 +82,7 @@ const OfficerTracker = ({ patrolId }) => {
               <div className="text-center">
                 <div className="text-5xl mb-2">🗺️</div>
                 <p>Interactive map would be displayed here with officer locations</p>
-                <p className="text-sm mt-2">Using mapping library like Leaflet or Google Maps</p>
+                <p className="text-sm mt-2">Using OpenStreetMap with Leaflet for mapping</p>
               </div>
             </div>
             

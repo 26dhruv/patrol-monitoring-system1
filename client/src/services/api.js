@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL;
-console.log('API_URL:', API_URL);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
+console.log('🔗 API URL configured as:', API_URL);
 
 const api = axios.create({
   baseURL: API_URL,
@@ -185,6 +186,17 @@ export const locationService = {
   createLocation: (locationData) => api.post('/locations', locationData),
   updateLocation: (id, locationData) => api.put(`/locations/${id}`, locationData),
   deleteLocation: (id) => api.delete(`/locations/${id}`),
+  geocode: (placeName, region = 'Ahmedabad, Gujarat, India') => api.post('/locations/geocode', { placeName, region })
+};
+
+// Patrol Route services
+export const patrolRouteService = {
+  getAllPatrolRoutes: (params) => api.get('/patrol-routes', { params }),
+  getPatrolRoute: (id) => api.get(`/patrol-routes/${id}`),
+  createPatrolRoute: (routeData) => api.post('/patrol-routes', routeData),
+  updatePatrolRoute: (id, routeData) => api.put(`/patrol-routes/${id}`, routeData),
+  deletePatrolRoute: (id) => api.delete(`/patrol-routes/${id}`),
+  getCheckpoint: (routeId, checkpointId) => api.get(`/patrol-routes/${routeId}/checkpoints/${checkpointId}`),
 };
 
 // Incident services
@@ -199,6 +211,15 @@ export const incidentService = {
   assignIncident: (id, officerIds) => api.patch(`/incidents/${id}/assign`, { assignedTo: officerIds }),
   updateStatus: (id, status) => api.patch(`/incidents/${id}/status`, { status }),
   getIncidentStats: (params) => api.get('/incidents/stats', { params }),
+};
+
+// AI Scheduler services
+export const aiSchedulerService = {
+  generatePatrolAssignments: (params) => api.post('/ai-scheduler/generate-assignments', params),
+  getSchedulingRecommendations: () => api.get('/ai-scheduler/recommendations'),
+  getOptimizationSuggestions: () => api.get('/ai-scheduler/optimization-suggestions'),
+  getSchedulingStats: () => api.get('/ai-scheduler/stats'),
+  validateSchedulingParams: (params) => api.post('/ai-scheduler/validate', params)
 };
 
 export default api; 
