@@ -1,11 +1,10 @@
-// require('dotenv').config({ path: '../.env' });
+require('dotenv').config({ path: '../.env' });
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 
-// MongoDB URI - replace with your actual connection string if needed
-const MONGO_URI = 'mongodb://localhost:27017/patrol_system';
-
+// MongoDB URI - use environment variable
+const MONGO_URI = process.env.MONGO_URI ;
 
 // Connect to database
 const connectDB = async () => {

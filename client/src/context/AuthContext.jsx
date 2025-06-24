@@ -8,18 +8,29 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load user from localStorage on mount
+  // Load user from localStorage on mount - removed token dependency to prevent infinite loops
   useEffect(() => {
     const loadUser = async () => {
       try {
         const storedUser = localStorage.getItem('user');
-        if (storedUser && token) {
+        const storedToken = localStorage.getItem('token');
+        
+        if (storedUser && storedToken) {
           setCurrentUser(JSON.parse(storedUser));
-          await fetchCurrentUser(); // Verify token is valid and refresh user data
+          
+          // Verify token is valid by making a test API call
+          try {
+            await fetchCurrentUser();
+          } catch (err) {
+            console.error('Token validation failed:', err);
+            // Only logout if it's a 401 error (invalid token)
+            if (err.response?.status === 401) {
+              logout();
+            }
+          }
         }
       } catch (err) {
         console.error('Error loading user:', err);
@@ -30,19 +41,34 @@ export const AuthProvider = ({ children }) => {
     };
 
     loadUser();
-  }, [token]);
+  }, []); // Removed token dependency
 
   // Fetch current user data from API
   const fetchCurrentUser = async () => {
     try {
       const response = await authService.getCurrentUser();
-      const userData = response.data.data;
+      console.log('AuthContext: getCurrentUser response:', response.data);
+      
+      // Handle different response structures
+      let userData;
+      if (response.data.user) {
+        userData = response.data.user;
+      } else if (response.data.data) {
+        userData = response.data.data;
+      } else {
+        userData = response.data;
+      }
+      
+      if (!userData) {
+        throw new Error('No user data received from server');
+      }
+      
       setCurrentUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       return userData;
     } catch (err) {
-      console.error('Error fetching current user:', err);
-      logout();
+      console.error('AuthContext: Error fetching current user:', err);
+      // Don't automatically logout here, let the calling function decide
       throw err;
     }
   };
@@ -51,12 +77,10 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setError(null);
+      setLoading(true);
       
-      // Clear any existing auth data to prevent conflicts
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setToken(null);
-      setCurrentUser(null);
+      // Track login attempt to prevent interceptor interference
+      localStorage.setItem('lastLoginAttempt', Date.now().toString());
       
       console.log('Attempting login with:', { email }); // Debug log
       
@@ -72,8 +96,10 @@ export const AuthProvider = ({ children }) => {
       // Store new auth data
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      setToken(token);
       setCurrentUser(user);
+      
+      // Clear login attempt tracking
+      localStorage.removeItem('lastLoginAttempt');
       
       notifySuccess(`Welcome, ${user.name}!`);
       
@@ -103,6 +129,10 @@ export const AuthProvider = ({ children }) => {
       setError(errorMessage);
       notifyError(errorMessage);
       throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+      // Clear login attempt tracking on error too
+      localStorage.removeItem('lastLoginAttempt');
     }
   };
 
@@ -114,7 +144,6 @@ export const AuthProvider = ({ children }) => {
       const { token, user } = response.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      setToken(token);
       setCurrentUser(user);
       notifySuccess('Registration successful!');
       return user;
@@ -131,15 +160,25 @@ export const AuthProvider = ({ children }) => {
 
   // Logout user
   const logout = () => {
+    console.log('AuthContext: Logging out user...');
+    
+    // Clear all authentication data
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setToken(null);
+    localStorage.removeItem('returnUrl');
+    localStorage.removeItem('sessionMessage');
+    localStorage.removeItem('lastLoginAttempt');
+    
     setCurrentUser(null);
+    
     try {
-      authService.logout();
+      // Call logout API (but don't wait for it to complete)
+      authService.logout().catch(err => {
+        console.error('AuthContext: Logout API error (non-critical):', err);
+      });
       notifyInfo('You have been logged out');
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('AuthContext: Logout error:', err);
     }
   };
 

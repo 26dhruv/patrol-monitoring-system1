@@ -59,16 +59,18 @@ const LoginPage = () => {
     
     try {
       setLoading(true);
+      
       await login(email, password);
+      
       
       // If there's a returnUrl in localStorage, the AuthContext's login method
       // will handle the redirect. Otherwise, go to dashboard.
       if (!localStorage.getItem('returnUrl')) {
         navigate('/dashboard');
-      }
+      } 
     } catch (err) {
-      console.error('Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
       setLoading(false);
     }
   };

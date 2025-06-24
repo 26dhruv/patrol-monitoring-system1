@@ -42,24 +42,33 @@ api.interceptors.response.use(
         
         // Only redirect to login if not already on login page and auth-related paths
         if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
-          // Clear authentication data
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          // Check if this is a fresh login attempt (within last 5 seconds)
+          const lastLoginAttempt = localStorage.getItem('lastLoginAttempt');
+          const now = Date.now();
           
-          // Store the current location to redirect back after login
-          localStorage.setItem('returnUrl', currentPath);
-          
-          // Store session expiration message
-          const sessionMessage = data.message || 'Your session has expired. Please login again.';
-          localStorage.setItem('sessionMessage', sessionMessage);
-          
-          // Show a user-friendly toast or alert if available in the app
-          if (window.showToast) {
-            window.showToast(sessionMessage, 'error');
+          if (!lastLoginAttempt || (now - parseInt(lastLoginAttempt)) > 5000) {
+            // Clear authentication data
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            // Store the current location to redirect back after login
+            localStorage.setItem('returnUrl', currentPath);
+            
+            // Store session expiration message
+            const sessionMessage = data.message || 'Your session has expired. Please login again.';
+            localStorage.setItem('sessionMessage', sessionMessage);
+            
+            // Show a user-friendly toast or alert if available in the app
+            if (window.showToast) {
+              window.showToast(sessionMessage, 'error');
+            }
+            
+            // Redirect to login page
+            window.location.href = '/login';
+          } else {
+            // This might be a login attempt, don't redirect
+            console.log('Login attempt detected, not redirecting');
           }
-          
-          // Redirect to login page
-          window.location.href = '/login';
         }
       }
       
