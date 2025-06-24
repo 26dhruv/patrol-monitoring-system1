@@ -10,7 +10,6 @@ const SettingsPage = () => {
   const [generalSettings, setGeneralSettings] = useState({
     emailNotifications: true,
     pushNotifications: false,
-    darkMode: false,
     language: 'english',
   });
   
@@ -195,24 +194,6 @@ const SettingsPage = () => {
       <div className="bg-[#071a2f]/70 p-6 rounded-lg shadow-md border border-blue-900/30">
         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500 mb-4">Interface</h3>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <label htmlFor="darkMode" className="font-medium text-blue-300">
-                Dark Mode
-              </label>
-              <p className="text-sm text-blue-200/70">Switch between light and dark theme</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={generalSettings.darkMode}
-                onChange={(e) => setGeneralSettings({...generalSettings, darkMode: e.target.checked})}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-[#0a2440] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-blue-900/30 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-          
           <div>
             <label htmlFor="language" className="block font-medium text-blue-300 mb-2">
               Language

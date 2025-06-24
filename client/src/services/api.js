@@ -31,23 +31,65 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Only redirect to login on 401 if not already on login page
-    if (error.response && error.response.status === 401) {
-      if (!window.location.pathname.includes('/login')) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+    // Handle authentication errors
+    if (error.response) {
+      const { status, data } = error.response;
+      
+      // Handle authentication errors (401)
+      if (status === 401) {
+        // Get current pathname
+        const currentPath = window.location.pathname;
+        
+        // Only redirect to login if not already on login page and auth-related paths
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          // Clear authentication data
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          
+          // Store the current location to redirect back after login
+          localStorage.setItem('returnUrl', currentPath);
+          
+          // Store session expiration message
+          const sessionMessage = data.message || 'Your session has expired. Please login again.';
+          localStorage.setItem('sessionMessage', sessionMessage);
+          
+          // Show a user-friendly toast or alert if available in the app
+          if (window.showToast) {
+            window.showToast(sessionMessage, 'error');
+          }
+          
+          // Redirect to login page
+          window.location.href = '/login';
+        }
+      }
+      
+      // Handle authorization errors (403)
+      if (status === 403) {
+        console.warn('Access forbidden:', data.message || 'You do not have permission to access this resource');
+        // Handle forbidden access (can redirect to a denied access page if needed)
+      }
+      
+      // Log all API errors for debugging with more details
+      console.error('API error:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        status,
+        data,
+        message: error.message,
+        stack: import.meta.env.DEV ? error.stack : undefined
+      });
+      
+      // Enhance error message with more details
+      if (data) {
+        if (data.message) {
+          error.message = data.message;
+        } else if (data.error) {
+          error.message = data.error;
+        } else if (data.msg) {
+          error.message = data.msg;
+        }
       }
     }
-    
-    // Log all API errors for debugging
-    console.error('API error:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
     
     return Promise.reject(error);
   }
@@ -69,6 +111,8 @@ export const authService = {
 export const userService = {
   getAllUsers: () => api.get('/users'),
   getUser: (id) => api.get(`/users/${id}`),
+  getUserById: (id) => api.get(`/users/${id}`),
+  createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/users/${id}`),
   getOfficers: () => api.get('/users/officers'),
@@ -78,7 +122,10 @@ export const userService = {
 
 // Patrol services
 export const patrolService = {
-  getAllPatrols: (params) => api.get('/patrol', { params }),
+  getAllPatrols: (params) => {
+    console.log('Making request to /patrol with params:', params);
+    return api.get('/patrol', { params });
+  },
   getPatrol: (id) => api.get(`/patrol/${id}`),
   createPatrol: (patrolData) => api.post('/patrol', patrolData),
   updatePatrol: (id, patrolData) => api.put(`/patrol/${id}`, patrolData),
@@ -91,6 +138,35 @@ export const patrolService = {
   completePatrol: (patrolId, data) => api.put(`/patrol/${patrolId}/complete`, data),
   getDashboardStats: () => api.get('/patrol/dashboard-stats'),
   getActivePatrols: () => api.get('/patrol/active'),
+  getOfficerPatrols: (officerId) => {
+    if (!officerId) {
+      console.error('Officer ID is required for getOfficerPatrols');
+      return Promise.reject(new Error('Officer ID is required'));
+    }
+    
+    // Log the URL and headers for debugging
+    const token = localStorage.getItem('token');
+    console.log(`Making request to get patrols for officer ID: ${officerId}`);
+    console.log(`Requesting URL: ${API_URL}/patrol/officer/${officerId}`);
+    console.log('Auth header present:', !!token);
+    
+    // Make the actual API call
+    return api.get(`/patrol/officer/${officerId}`)
+      .then(response => {
+        console.log('Officer patrols API response:', response.status, response.data);
+        return response;
+      })
+      .catch(error => {
+        // Enhanced error logging
+        console.error(`Error fetching officer patrols:`, error.message);
+        if (error.response) {
+          console.error('Error response status:', error.response.status);
+          console.error('Error response data:', error.response.data);
+        }
+        // If the endpoint doesn't exist, we'll return a structured error for better handling
+        throw new Error(`Failed to fetch officer patrols: ${error.message}`);
+      });
+  },
 };
 
 // Location services
@@ -113,7 +189,7 @@ export const incidentService = {
   addAction: (id, actionData) => api.post(`/incidents/${id}/actions`, actionData),
   assignIncident: (id, officerIds) => api.patch(`/incidents/${id}/assign`, { assignedTo: officerIds }),
   updateStatus: (id, status) => api.patch(`/incidents/${id}/status`, { status }),
-  getIncidentStats: () => api.get('/incidents/stats'),
+  getIncidentStats: (params) => api.get('/incidents/stats', { params }),
 };
 
 export default api; 

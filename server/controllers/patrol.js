@@ -2,6 +2,7 @@ const Patrol = require('../models/Patrol');
 const PatrolLog = require('../models/PatrolLog');
 const User = require('../models/User');
 const Location = require('../models/Location');
+const mongoose = require('mongoose');
 
 // @desc    Create a new patrol
 // @route   POST /api/patrol
@@ -31,6 +32,7 @@ exports.createPatrol = async (req, res, next) => {
 // @access  Private
 exports.getPatrols = async (req, res, next) => {
   try {
+    console.log('getPatrols called with query:', req.query);
     let query;
 
     // Copy req.query
@@ -42,14 +44,56 @@ exports.getPatrols = async (req, res, next) => {
     // Loop over removeFields and delete them from reqQuery
     removeFields.forEach(param => delete reqQuery[param]);
 
+    // Handle special case for assignedOfficers - improved handling
+    if (reqQuery.assignedOfficers) {
+      console.log('Found assignedOfficers in query:', reqQuery.assignedOfficers);
+      
+      try {
+        // If it's a valid ObjectId, use it directly
+        if (mongoose.Types.ObjectId.isValid(reqQuery.assignedOfficers)) {
+          console.log('Using valid ObjectId for assignedOfficers:', reqQuery.assignedOfficers);
+          reqQuery.assignedOfficers = new mongoose.Types.ObjectId(reqQuery.assignedOfficers);
+        } else {
+          console.log('assignedOfficers is not a valid ObjectId, using as string:', reqQuery.assignedOfficers);
+        }
+      } catch (err) {
+        console.error('Error processing assignedOfficers parameter:', err);
+        // If there's an error, keep the original value
+      }
+    }
+
+    // If officerId is in the query, use it to filter by assignedOfficers
+    if (reqQuery.officerId) {
+      console.log('Found officerId in query, using as assignedOfficers:', reqQuery.officerId);
+      
+      try {
+        // If it's a valid ObjectId, use it directly
+        if (mongoose.Types.ObjectId.isValid(reqQuery.officerId)) {
+          reqQuery.assignedOfficers = new mongoose.Types.ObjectId(reqQuery.officerId);
+        } else {
+          reqQuery.assignedOfficers = reqQuery.officerId;
+        }
+      } catch (err) {
+        console.error('Error processing officerId parameter:', err);
+        reqQuery.assignedOfficers = reqQuery.officerId;
+      }
+      
+      delete reqQuery.officerId; // Remove the original parameter
+    }
+
     // Create query string
     let queryStr = JSON.stringify(reqQuery);
+    console.log('Query string before conversion:', queryStr);
 
     // Create operators ($gt, $gte, etc)
     queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
+    
+    // Parse the query
+    const parsedQuery = JSON.parse(queryStr);
+    console.log('Parsed query:', parsedQuery);
 
     // Finding resource
-    query = Patrol.find(JSON.parse(queryStr))
+    query = Patrol.find(parsedQuery)
       .populate('assignedOfficers', 'name email badgeNumber')
       .populate('assignedBy', 'name email')
       .populate('locations', 'name coordinates');
@@ -73,15 +117,20 @@ exports.getPatrols = async (req, res, next) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
-    const total = await Patrol.countDocuments();
+    
+    // Get total count of documents matching the query (before pagination)
+    const total = await Patrol.countDocuments(parsedQuery);
 
     query = query.skip(startIndex).limit(limit);
 
     // Executing query
     const patrols = await query;
+    console.log(`Found ${patrols.length} patrols`);
 
     // Pagination result
     const pagination = {};
+    pagination.totalPages = Math.ceil(total / limit);
+    pagination.currentPage = page;
 
     if (endIndex < total) {
       pagination.next = {
@@ -100,11 +149,12 @@ exports.getPatrols = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: patrols.length,
+      total,
       pagination,
       data: patrols
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error in getPatrols:', error);
     res.status(500).json({
       success: false,
       error: 'Server Error'
@@ -430,8 +480,20 @@ exports.completePatrol = async (req, res, next) => {
 // @access  Private
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    // Get active patrols count
-    const activePatrols = await Patrol.countDocuments({ status: 'in-progress' });
+    // Extract user role and ID from query parameters
+    const userRole = req.query.userRole;
+    const userId = req.query.userId;
+    
+    // Get active patrols count - filter by officer ID if officer role
+    let activePatrols;
+    if (userRole === 'officer') {
+      activePatrols = await Patrol.countDocuments({ 
+        status: 'in-progress',
+        assignedOfficers: userId
+      });
+    } else {
+      activePatrols = await Patrol.countDocuments({ status: 'in-progress' });
+    }
     
     // Get officers on duty count
     const officersOnDuty = await User.countDocuments({ 
@@ -439,18 +501,44 @@ exports.getDashboardStats = async (req, res, next) => {
       status: 'on-duty'
     });
     
-    // Get patrols today count
+    // Get patrols today count - filter by officer ID if officer role
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const patrolsToday = await Patrol.countDocuments({
-      startTime: { $gte: today }
-    });
+    let patrolsToday;
+    if (userRole === 'officer') {
+      patrolsToday = await Patrol.countDocuments({
+        startTime: { $gte: today },
+        assignedOfficers: userId
+      });
+    } else {
+      patrolsToday = await Patrol.countDocuments({
+        startTime: { $gte: today }
+      });
+    }
     
     // Get total locations count
     const totalLocations = await Location.countDocuments();
     
-    // Get recent patrols
-    const recentPatrols = await Patrol.find()
+    // Get completed patrols count for officers
+    let completedPatrols;
+    if (userRole === 'officer') {
+      completedPatrols = await Patrol.countDocuments({
+        status: 'completed',
+        assignedOfficers: userId
+      });
+    } else {
+      completedPatrols = await Patrol.countDocuments({
+        status: 'completed'
+      });
+    }
+    
+    // Get recent patrols - filter by officer ID if officer role
+    let recentPatrolsQuery = Patrol.find();
+    if (userRole === 'officer') {
+      recentPatrolsQuery = recentPatrolsQuery.find({ assignedOfficers: userId });
+    }
+    
+    const recentPatrols = await recentPatrolsQuery
       .populate('assignedOfficers', 'name')
       .populate('locations', 'name')
       .sort('-startTime')
@@ -468,6 +556,7 @@ exports.getDashboardStats = async (req, res, next) => {
         officersOnDuty,
         patrolsToday,
         totalLocations,
+        completedPatrols,
         recentPatrols,
         officers
       }
@@ -486,7 +575,18 @@ exports.getDashboardStats = async (req, res, next) => {
 // @access  Private
 exports.getActivePatrols = async (req, res, next) => {
   try {
-    const activePatrols = await Patrol.find({ status: 'in-progress' })
+    // Extract user role and ID from query parameters or request user
+    const userRole = req.query.userRole || req.user.role;
+    const userId = req.query.userId || req.user.id || req.user._id;
+    
+    let query = { status: 'in-progress' };
+    
+    // If user is an officer, only show their assigned patrols
+    if (userRole === 'officer') {
+      query.assignedOfficers = userId;
+    }
+    
+    const activePatrols = await Patrol.find(query)
       .populate('assignedOfficers', 'name')
       .populate('location', 'name coordinates')
       .select('location assignedOfficers status startTime');
@@ -496,7 +596,7 @@ exports.getActivePatrols = async (req, res, next) => {
       data: activePatrols
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching active patrols:', error);
     res.status(500).json({
       success: false,
       error: 'Server Error'

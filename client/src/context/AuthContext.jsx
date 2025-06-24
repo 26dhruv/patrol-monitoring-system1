@@ -76,6 +76,22 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(user);
       
       notifySuccess(`Welcome, ${user.name}!`);
+      
+      // Check if there's a return URL to redirect to after login
+      const returnUrl = localStorage.getItem('returnUrl');
+      if (returnUrl) {
+        // Clear the stored URL to prevent future unexpected redirects
+        localStorage.removeItem('returnUrl');
+        
+        // Ensure we're not redirecting to login or other auth pages
+        if (!returnUrl.includes('/login') && !returnUrl.includes('/register')) {
+          // Use timeout to ensure the context is fully updated before redirect
+          setTimeout(() => {
+            window.location.href = returnUrl;
+          }, 100);
+        }
+      }
+      
       return user;
     } catch (err) {
       console.error('Login error details:', err.response || err);

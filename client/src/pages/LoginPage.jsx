@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
@@ -8,7 +8,9 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [sessionMessage, setSessionMessage] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
   // Track scroll position for gradient effects
@@ -25,9 +27,30 @@ const LoginPage = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Check for session expiration messages
+  useEffect(() => {
+    // Check URL parameters first
+    const params = new URLSearchParams(location.search);
+    const message = params.get('message');
+    
+    if (message) {
+      // URL parameter takes precedence
+      setSessionMessage(decodeURIComponent(message));
+    } else {
+      // Then check localStorage for session expiration message
+      const storedMessage = localStorage.getItem('sessionMessage');
+      if (storedMessage) {
+        setSessionMessage(storedMessage);
+        // Clear the message after reading it
+        localStorage.removeItem('sessionMessage');
+      }
+    }
+  }, [location]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSessionMessage('');
     
     if (!email || !password) {
       setError('Please enter both email and password');
@@ -37,7 +60,12 @@ const LoginPage = () => {
     try {
       setLoading(true);
       await login(email, password);
-      navigate('/dashboard');
+      
+      // If there's a returnUrl in localStorage, the AuthContext's login method
+      // will handle the redirect. Otherwise, go to dashboard.
+      if (!localStorage.getItem('returnUrl')) {
+        navigate('/dashboard');
+      }
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
@@ -90,6 +118,16 @@ const LoginPage = () => {
         </div>
         
         <div className="card-glass p-8 shadow-lg shadow-blue-900/10 animation-delay-200 animate-fadeUp">
+          {/* Session Expiration Message */}
+          {sessionMessage && (
+            <div className="mb-6 text-sm text-center text-amber-300 py-3 px-4 bg-amber-900/20 rounded-md border border-amber-900/30">
+              <svg className="h-5 w-5 mx-auto mb-1 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {sessionMessage}
+            </div>
+          )}
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>

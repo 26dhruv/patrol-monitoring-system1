@@ -78,11 +78,18 @@ exports.login = async (req, res, next) => {
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id || req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
 
     res.status(200).json({
       success: true,
-      data: user
+      user: user
     });
   } catch (error) {
     console.error(error);

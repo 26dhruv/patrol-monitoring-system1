@@ -1045,14 +1045,14 @@ const HomePage = () => {
                   <div className="bg-[#081425]/80 p-4 rounded-lg space-y-3 mb-4">
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Username</div>
-                      <div className="font-mono text-blue-100">admin@demo.com</div>
+                      <div className="font-mono text-blue-100">admin@example.com</div>
                     </div>
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Password</div>
-                      <div className="font-mono text-blue-100">admin123</div>
+                      <div className="font-mono text-blue-100">password123</div>
                     </div>
                   </div>
-                  <Link to="/login?email=admin@demo.com&password=admin123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
+                  <Link to="/login?email=admin@example.com&password=password123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
                     Login as Admin
                   </Link>
                 </div>
@@ -1072,14 +1072,14 @@ const HomePage = () => {
                   <div className="bg-[#081425]/80 p-4 rounded-lg space-y-3 mb-4">
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Username</div>
-                      <div className="font-mono text-blue-100">supervisor@demo.com</div>
+                      <div className="font-mono text-blue-100">manager@example.com</div>
                     </div>
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Password</div>
-                      <div className="font-mono text-blue-100">super123</div>
+                      <div className="font-mono text-blue-100">password123</div>
                     </div>
                   </div>
-                  <Link to="/login?email=supervisor@demo.com&password=super123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
+                  <Link to="/login?email=manager@example.com&password=password123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
                     Login as Supervisor
                   </Link>
                 </div>
@@ -1099,14 +1099,14 @@ const HomePage = () => {
                   <div className="bg-[#081425]/80 p-4 rounded-lg space-y-3 mb-4">
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Username</div>
-                      <div className="font-mono text-blue-100">officer@demo.com</div>
+                      <div className="font-mono text-blue-100">officer1@example.com</div>
                     </div>
                     <div>
                       <div className="text-xs text-blue-400 mb-1">Password</div>
-                      <div className="font-mono text-blue-100">officer123</div>
+                      <div className="font-mono text-blue-100">password123</div>
                     </div>
                   </div>
-                  <Link to="/login?email=officer@demo.com&password=officer123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
+                  <Link to="/login?email=officer1@example.com&password=password123" className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-md text-center text-white font-medium transition-colors duration-300">
                     Login as Officer
                   </Link>
                 </div>

@@ -52,6 +52,7 @@ function App() {
               {/* Patrols */}
               <Route path="/patrols" element={<PatrolsPage />} />
               <Route path="/patrols/:id" element={<PatrolDetailPage />} />
+              <Route path="/my-patrols" element={<PatrolsPage officerOnly={true} />} />
               
               {/* Incidents */}
               <Route path="/incidents" element={<IncidentsPage />} />

@@ -1,6 +1,7 @@
 const Patrol = require('../models/Patrol');
 const Incident = require('../models/Incident');
 const User = require('../models/User');
+const Location = require('../models/Location');
 const { ApiError } = require('../errors');
 const json2csv = require('json2csv').Parser;
 
@@ -41,6 +42,60 @@ exports.getReports = async (req, res, next) => {
     }
     
     res.status(200).json(reportData);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get reports statistics
+ * @route GET /api/reports/stats
+ * @access Private
+ */
+exports.getReportStats = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      throw new ApiError('Missing required parameters', 400);
+    }
+
+    const startDateTime = new Date(startDate);
+    const endDateTime = new Date(endDate);
+
+    if (isNaN(startDateTime) || isNaN(endDateTime)) {
+      throw new ApiError('Invalid date format', 400);
+    }
+
+    const dateFilter = {
+      startTime: { $gte: startDateTime, $lte: endDateTime },
+    };
+
+    // Calculate stats
+    const totalPatrols = await Patrol.countDocuments(dateFilter);
+    const totalIncidents = await Incident.countDocuments({
+      date: { $gte: startDateTime, $lte: endDateTime },
+    });
+    const patrolsCompleted = await Patrol.countDocuments({
+      ...dateFilter,
+      status: 'completed',
+    });
+    
+    // Calculate patrol coverage
+    const totalLocations = await Location.countDocuments();
+    const patrolledLocations = await Patrol.distinct('locations', dateFilter);
+    const coveragePercentage = totalLocations > 0 ? (patrolledLocations.length / totalLocations) * 100 : 0;
+
+
+    res.status(200).json({
+      totalPatrols,
+      totalIncidents,
+      patrolsCompleted,
+      coveragePercentage: Math.round(coveragePercentage),
+      // Average response time is complex and needs more data points
+      // We will return a static value for now
+      averageResponseTime: 4.2, 
+    });
   } catch (error) {
     next(error);
   }

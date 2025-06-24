@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { userService } from '../services/api';
+import { userService, authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
@@ -93,7 +93,7 @@ const OfficerFormPage = () => {
       if (isEditMode) {
         await userService.updateUser(id, officerData);
       } else {
-        await userService.createUser(officerData);
+        await authService.register(officerData);
       }
       
       navigate('/officers');
