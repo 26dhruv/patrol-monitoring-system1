@@ -106,6 +106,13 @@ const PatrolSchema = new mongoose.Schema(
       type: Number, // in minutes
       default: 0,
     },
+    patrolPath: [
+      {
+        latitude: { type: Number, required: true },
+        longitude: { type: Number, required: true },
+        timestamp: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );

@@ -27,6 +27,7 @@ const AISchedulerPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [validation, setValidation] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Check if user has permission
   const canAccess = hasRole(['admin', 'manager']);
@@ -43,6 +44,7 @@ const AISchedulerPage = () => {
 
   const loadInitialData = async () => {
     try {
+      setLoading(true);
       await Promise.all([
         loadSchedulingStats(),
         loadRecommendations(),
@@ -50,6 +52,9 @@ const AISchedulerPage = () => {
       ]);
     } catch (err) {
       console.error('Error loading initial data:', err);
+      setError('Failed to load initial data. Please refresh the page.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -65,7 +70,7 @@ const AISchedulerPage = () => {
   const loadRecommendations = async () => {
     try {
       const response = await aiSchedulerService.getSchedulingRecommendations();
-      setRecommendations(response.data.data);
+      setRecommendations(response.data.data || []);
     } catch (err) {
       console.error('Error loading recommendations:', err);
     }
@@ -74,7 +79,7 @@ const AISchedulerPage = () => {
   const loadOptimizationSuggestions = async () => {
     try {
       const response = await aiSchedulerService.getOptimizationSuggestions();
-      setOptimizationSuggestions(response.data.data);
+      setOptimizationSuggestions(response.data.data || []);
     } catch (err) {
       console.error('Error loading optimization suggestions:', err);
     }
@@ -98,6 +103,8 @@ const AISchedulerPage = () => {
       
       if (!response.data.data.isValid) {
         setError('Please fix the validation errors before generating assignments.');
+      } else {
+        setSuccess('Parameters validated successfully!');
       }
     } catch (err) {
       console.error('Validation error:', err);
@@ -186,352 +193,482 @@ const AISchedulerPage = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500">
-          🤖 AI Patrol Scheduler
-        </h1>
-        <button 
-          onClick={() => navigate('/patrols')}
-          className="btn-outline"
-        >
-          View All Patrols
-        </button>
-      </div>
-
-      {/* Stats Overview */}
-      {schedulingStats && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="card-glass border border-blue-900/30 rounded-lg p-4">
-            <div className="text-2xl font-bold text-blue-300">{schedulingStats.patrols.total}</div>
-            <div className="text-sm text-blue-400">Total Patrols</div>
-          </div>
-          <div className="card-glass border border-green-900/30 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-300">{schedulingStats.routes.total}</div>
-            <div className="text-sm text-blue-400">Active Routes</div>
-          </div>
-          <div className="card-glass border border-purple-900/30 rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-300">{schedulingStats.officers.available}</div>
-            <div className="text-sm text-blue-400">Available Officers</div>
-          </div>
-          <div className="card-glass border border-red-900/30 rounded-lg p-4">
-            <div className="text-2xl font-bold text-red-300">{schedulingStats.incidents.open}</div>
-            <div className="text-sm text-blue-400">Open Incidents</div>
-          </div>
-          <div className="card-glass border border-yellow-900/30 rounded-lg p-4">
-            <div className="text-2xl font-bold text-yellow-300">{schedulingStats.recommendations.optimalRoutes}</div>
-            <div className="text-sm text-blue-400">Recommended Routes</div>
-          </div>
-        </div>
-      )}
-
-      {/* Recommendations */}
-      {recommendations.length > 0 && (
-        <div className="card-glass border border-blue-900/30 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-blue-300 mb-4">📋 AI Recommendations</h2>
-          <div className="space-y-3">
-            {recommendations.map((rec, index) => (
-              <div key={index} className={`p-3 rounded-md border ${getPriorityBg(rec.priority)}`}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className={`font-medium ${getPriorityColor(rec.priority)}`}>
-                      {rec.type.replace('_', ' ').toUpperCase()}
-                    </p>
-                    <p className="text-blue-200 text-sm mt-1">{rec.message}</p>
-                  </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(rec.priority)}`}>
-                    {rec.priority}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Optimization Suggestions */}
-      {optimizationSuggestions.length > 0 && (
-        <div className="card-glass border border-blue-900/30 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-blue-300 mb-4">⚡ Real-time Optimization</h2>
-          <div className="space-y-3">
-            {optimizationSuggestions.map((suggestion, index) => (
-              <div key={index} className={`p-3 rounded-md border ${getPriorityBg(suggestion.priority)}`}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className={`font-medium ${getPriorityColor(suggestion.priority)}`}>
-                      {suggestion.type.replace('_', ' ').toUpperCase()}
-                    </p>
-                    <p className="text-blue-200 text-sm mt-1">{suggestion.message}</p>
-                    <p className="text-blue-400 text-xs mt-1">Distance: {suggestion.distance.toFixed(1)}km</p>
-                  </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(suggestion.priority)}`}>
-                    {suggestion.priority}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Error and Success Messages */}
-      {error && (
-        <div className="bg-red-900/20 border border-red-500/30 text-red-400 px-4 py-3 rounded-md">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-900/20 border border-green-500/30 text-green-400 px-4 py-3 rounded-md">
-          {success}
-        </div>
-      )}
-
-      {/* AI Scheduler Form */}
-      <div className="card-glass border border-blue-900/30 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-blue-300 mb-4">Generate AI Patrol Assignments</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <label htmlFor="maxRoutes" className="block text-sm font-medium text-blue-300 mb-1">
-              Maximum Routes
-            </label>
-            <input
-              type="number"
-              id="maxRoutes"
-              name="maxRoutes"
-              min="1"
-              max="10"
-              value={formData.maxRoutes}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-            <p className="text-xs text-blue-400 mt-1">Recommended: {schedulingStats?.recommendations.optimalRoutes || 5}</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-purple-300 to-blue-500">
+              🤖 AI Patrol Scheduler
+            </h1>
+            <p className="text-blue-300 mt-2 text-lg">
+              Intelligent patrol route optimization and assignment
+            </p>
           </div>
-
-          <div>
-            <label htmlFor="startTime" className="block text-sm font-medium text-blue-300 mb-1">
-              Start Time
-            </label>
-            <input
-              type="datetime-local"
-              id="startTime"
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="endTime" className="block text-sm font-medium text-blue-300 mb-1">
-              End Time
-            </label>
-            <input
-              type="datetime-local"
-              id="endTime"
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              name="autoCreate"
-              checked={formData.autoCreate}
-              onChange={handleInputChange}
-              className="mr-2"
-            />
-            <span className="text-sm text-blue-300">Automatically create patrol assignments</span>
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              name="includeIncidentAreas"
-              checked={formData.includeIncidentAreas}
-              onChange={handleInputChange}
-              className="mr-2"
-            />
-            <span className="text-sm text-blue-300">Include incident areas in patrol routes (creates routes for active incidents)</span>
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              name="createMissingRoutes"
-              checked={formData.createMissingRoutes}
-              onChange={handleInputChange}
-              className="mr-2"
-            />
-            <span className="text-sm text-blue-300">Dynamically create routes for incident areas not covered by existing routes</span>
-          </label>
-        </div>
-
-        <div className="flex gap-4 mt-6">
-          <button
-            onClick={validateParams}
-            disabled={loading}
-            className="btn-secondary"
+          <button 
+            onClick={() => navigate('/patrols')}
+            className="btn-outline bg-blue-900/30 border-blue-500/50 text-blue-300 hover:bg-blue-800/50"
           >
-            {loading ? <Spinner size="sm" /> : 'Validate Parameters'}
+            View All Patrols
           </button>
+        </div>
 
-          <button
-            onClick={generateAssignments}
-            disabled={loading}
-            className="btn-primary"
-          >
-            {loading ? <Spinner size="sm" /> : 'Generate Assignments'}
-          </button>
-
-          {generatedAssignments && !formData.autoCreate && (
+        {/* Navigation Tabs */}
+        <div className="flex space-x-1 bg-slate-800/50 rounded-lg p-1">
+          {[
+            { id: 'overview', label: 'Overview', icon: '📊' },
+            { id: 'scheduler', label: 'AI Scheduler', icon: '⚙️' },
+            { id: 'results', label: 'Results', icon: '📋' }
+          ].map((tab) => (
             <button
-              onClick={handleCreatePatrols}
-              disabled={loading}
-              className="btn-success"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 px-4 rounded-md transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'bg-blue-600/50 text-blue-200 shadow-lg'
+                  : 'text-blue-400 hover:text-blue-300 hover:bg-slate-700/50'
+              }`}
             >
-              {loading ? <Spinner size="sm" /> : 'Create Patrols'}
+              <span className="mr-2">{tab.icon}</span>
+              {tab.label}
             </button>
-          )}
+          ))}
         </div>
 
-        {/* Validation Results */}
-        {validation && (
-          <div className="mt-4 p-4 rounded-md border">
-            <h3 className="font-medium text-blue-300 mb-2">Validation Results</h3>
-            {validation.errors.length > 0 && (
-              <div className="text-red-400 text-sm mb-2">
-                <strong>Errors:</strong>
-                <ul className="list-disc list-inside ml-2">
-                  {validation.errors.map((error, index) => (
-                    <li key={index}>{error}</li>
-                  ))}
-                </ul>
+        {/* Error and Success Messages */}
+        {error && (
+          <div className="bg-red-900/20 border border-red-500/30 text-red-400 px-6 py-4 rounded-lg backdrop-blur-sm">
+            <div className="flex items-center">
+              <span className="text-xl mr-3">⚠️</span>
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-900/20 border border-green-500/30 text-green-400 px-6 py-4 rounded-lg backdrop-blur-sm">
+            <div className="flex items-center">
+              <span className="text-xl mr-3">✅</span>
+              <span>{success}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Stats Overview */}
+            {schedulingStats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="card-glass border border-blue-900/30 rounded-xl p-6 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-3xl font-bold text-blue-300">{schedulingStats.patrols.total}</div>
+                      <div className="text-sm text-blue-400">Total Patrols</div>
+                    </div>
+                    <div className="text-2xl">🚔</div>
+                  </div>
+                </div>
+                <div className="card-glass border border-green-900/30 rounded-xl p-6 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-3xl font-bold text-green-300">{schedulingStats.routes.total}</div>
+                      <div className="text-sm text-blue-400">Active Routes</div>
+                    </div>
+                    <div className="text-2xl">🗺️</div>
+                  </div>
+                </div>
+                <div className="card-glass border border-purple-900/30 rounded-xl p-6 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-3xl font-bold text-purple-300">{schedulingStats.officers.available}</div>
+                      <div className="text-sm text-blue-400">Available Officers</div>
+                    </div>
+                    <div className="text-2xl">👮</div>
+                  </div>
+                </div>
+                <div className="card-glass border border-red-900/30 rounded-xl p-6 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-3xl font-bold text-red-300">{schedulingStats.incidents.open}</div>
+                      <div className="text-sm text-blue-400">Open Incidents</div>
+                    </div>
+                    <div className="text-2xl">🚨</div>
+                  </div>
+                </div>
+                <div className="card-glass border border-yellow-900/30 rounded-xl p-6 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-3xl font-bold text-yellow-300">{schedulingStats.recommendations.optimalRoutes}</div>
+                      <div className="text-sm text-blue-400">Recommended Routes</div>
+                    </div>
+                    <div className="text-2xl">🎯</div>
+                  </div>
+                </div>
               </div>
             )}
-            {validation.warnings.length > 0 && (
-              <div className="text-yellow-400 text-sm">
-                <strong>Warnings:</strong>
-                <ul className="list-disc list-inside ml-2">
-                  {validation.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
+
+            {/* Recommendations */}
+            {recommendations.length > 0 && (
+              <div className="card-glass border border-blue-900/30 rounded-xl p-6 backdrop-blur-sm">
+                <h2 className="text-2xl font-semibold text-blue-300 mb-6 flex items-center">
+                  <span className="mr-3">📋</span>
+                  AI Recommendations
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {recommendations.map((rec, index) => (
+                    <div key={index} className={`p-4 rounded-lg border ${getPriorityBg(rec.priority)} backdrop-blur-sm`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className={`font-medium ${getPriorityColor(rec.priority)}`}>
+                            {rec.type.replace('_', ' ').toUpperCase()}
+                          </p>
+                          <p className="text-blue-200 text-sm mt-2">{rec.message}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(rec.priority)} bg-slate-800/50`}>
+                          {rec.priority}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Optimization Suggestions */}
+            {optimizationSuggestions.length > 0 && (
+              <div className="card-glass border border-blue-900/30 rounded-xl p-6 backdrop-blur-sm">
+                <h2 className="text-2xl font-semibold text-blue-300 mb-6 flex items-center">
+                  <span className="mr-3">⚡</span>
+                  Real-time Optimization
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {optimizationSuggestions.map((suggestion, index) => (
+                    <div key={index} className={`p-4 rounded-lg border ${getPriorityBg(suggestion.priority)} backdrop-blur-sm`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className={`font-medium ${getPriorityColor(suggestion.priority)}`}>
+                            {suggestion.type.replace('_', ' ').toUpperCase()}
+                          </p>
+                          <p className="text-blue-200 text-sm mt-2">{suggestion.message}</p>
+                          <p className="text-blue-400 text-xs mt-2">Distance: {suggestion.distance.toFixed(1)}km</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(suggestion.priority)} bg-slate-800/50`}>
+                          {suggestion.priority}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         )}
-      </div>
 
-      {/* Generated Assignments */}
-      {generatedAssignments && (
-        <div className="card-glass border border-blue-900/30 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-blue-300 mb-4">Generated Patrol Assignments</h2>
-          
-          <div className="mb-4 p-4 bg-blue-900/20 rounded-md">
-            <h3 className="font-medium text-blue-300 mb-2">Summary</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-blue-400">Total Assignments:</span>
-                <span className="text-blue-200 ml-2">{generatedAssignments.summary.totalAssignments}</span>
-              </div>
-              <div>
-                <span className="text-blue-400">Coverage:</span>
-                <span className="text-blue-200 ml-2">{typeof generatedAssignments.summary.coverage === 'number' ? generatedAssignments.summary.coverage.toFixed(1) : 'N/A'}%</span>
-              </div>
-              <div>
-                <span className="text-blue-400">Average Score:</span>
-                <span className="text-blue-200 ml-2">{typeof generatedAssignments.summary.averageScore === 'number' ? generatedAssignments.summary.averageScore.toFixed(2) : 'N/A'}</span>
-              </div>
-              <div>
-                <span className="text-blue-400">Total Officers:</span>
-                <span className="text-blue-200 ml-2">{generatedAssignments.summary.totalOfficers}</span>
-              </div>
-              {generatedAssignments.summary.routesCreated > 0 && (
+        {/* AI Scheduler Tab */}
+        {activeTab === 'scheduler' && (
+          <div className="card-glass border border-blue-900/30 rounded-xl p-8 backdrop-blur-sm">
+            <h2 className="text-2xl font-semibold text-blue-300 mb-6 flex items-center">
+              <span className="mr-3">⚙️</span>
+              Generate AI Patrol Assignments
+            </h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Basic Settings */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-blue-300">Basic Settings</h3>
+                
                 <div>
-                  <span className="text-blue-400">Routes Created:</span>
-                  <span className="text-blue-200 ml-2">{generatedAssignments.summary.routesCreated}</span>
+                  <label htmlFor="maxRoutes" className="block text-sm font-medium text-blue-300 mb-2">
+                    Maximum Routes
+                  </label>
+                  <input
+                    type="number"
+                    id="maxRoutes"
+                    name="maxRoutes"
+                    min="1"
+                    max="10"
+                    value={formData.maxRoutes}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-blue-900/30 rounded-lg shadow-sm text-blue-100 bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm"
+                  />
+                  <p className="text-xs text-blue-400 mt-2">
+                    Recommended: {schedulingStats?.recommendations.optimalRoutes || 5}
+                  </p>
                 </div>
-              )}
+
+                <div>
+                  <label htmlFor="startTime" className="block text-sm font-medium text-blue-300 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="startTime"
+                    name="startTime"
+                    value={formData.startTime}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-blue-900/30 rounded-lg shadow-sm text-blue-100 bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="endTime" className="block text-sm font-medium text-blue-300 mb-2">
+                    End Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="endTime"
+                    name="endTime"
+                    value={formData.endTime}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-blue-900/30 rounded-lg shadow-sm text-blue-100 bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Advanced Options */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-blue-300">Advanced Options</h3>
+                
+                <div className="space-y-4">
+                  <label className="flex items-start p-4 rounded-lg border border-blue-900/30 bg-slate-800/30 backdrop-blur-sm hover:bg-slate-700/30 transition-colors cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="autoCreate"
+                      checked={formData.autoCreate}
+                      onChange={handleInputChange}
+                      className="mr-3 mt-1"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-blue-300">Auto Create Patrols</span>
+                      <p className="text-xs text-blue-400 mt-1">Automatically create patrol assignments in the system</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start p-4 rounded-lg border border-blue-900/30 bg-slate-800/30 backdrop-blur-sm hover:bg-slate-700/30 transition-colors cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="includeIncidentAreas"
+                      checked={formData.includeIncidentAreas}
+                      onChange={handleInputChange}
+                      className="mr-3 mt-1"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-blue-300">Include Incident Areas</span>
+                      <p className="text-xs text-blue-400 mt-1">Create routes for active incidents</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start p-4 rounded-lg border border-blue-900/30 bg-slate-800/30 backdrop-blur-sm hover:bg-slate-700/30 transition-colors cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="createMissingRoutes"
+                      checked={formData.createMissingRoutes}
+                      onChange={handleInputChange}
+                      className="mr-3 mt-1"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-blue-300">Create Missing Routes</span>
+                      <p className="text-xs text-blue-400 mt-1">Dynamically create routes for uncovered incident areas</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-blue-300">Actions</h3>
+                
+                <div className="space-y-4">
+                  <button
+                    onClick={validateParams}
+                    disabled={loading}
+                    className="w-full btn-secondary bg-slate-700/50 border-slate-600/50 text-blue-300 hover:bg-slate-600/50 backdrop-blur-sm"
+                  >
+                    {loading ? <Spinner size="sm" /> : 'Validate Parameters'}
+                  </button>
+
+                  <button
+                    onClick={generateAssignments}
+                    disabled={loading}
+                    className="w-full btn-primary bg-blue-600/50 border-blue-500/50 text-white hover:bg-blue-500/50 backdrop-blur-sm"
+                  >
+                    {loading ? <Spinner size="sm" /> : 'Generate Assignments'}
+                  </button>
+
+                  {generatedAssignments && !formData.autoCreate && (
+                    <button
+                      onClick={handleCreatePatrols}
+                      disabled={loading}
+                      className="w-full btn-success bg-green-600/50 border-green-500/50 text-white hover:bg-green-500/50 backdrop-blur-sm"
+                    >
+                      {loading ? <Spinner size="sm" /> : 'Create Patrols'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Validation Results */}
+                {validation && (
+                  <div className="p-4 rounded-lg border border-blue-900/30 bg-slate-800/30 backdrop-blur-sm">
+                    <h3 className="font-medium text-blue-300 mb-3">Validation Results</h3>
+                    {validation.errors.length > 0 && (
+                      <div className="text-red-400 text-sm mb-3">
+                        <strong>Errors:</strong>
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          {validation.errors.map((error, index) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {validation.warnings.length > 0 && (
+                      <div className="text-yellow-400 text-sm">
+                        <strong>Warnings:</strong>
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          {validation.warnings.map((warning, index) => (
+                            <li key={index}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="space-y-4">
-            {generatedAssignments.assignments.map((assignment, index) => (
-              <div key={index} className="p-4 border border-blue-900/30 rounded-md">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-medium text-blue-300">{assignment.route.name}</h4>
-                    <p className="text-sm text-blue-400">Assigned to: {assignment.officer.name}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-blue-300">{typeof assignment.score === 'number' ? assignment.score.toFixed(2) : 'N/A'}</div>
-                    <div className="text-xs text-blue-400">Priority Score</div>
-                  </div>
+        {/* Results Tab */}
+        {activeTab === 'results' && generatedAssignments && (
+          <div className="card-glass border border-blue-900/30 rounded-xl p-8 backdrop-blur-sm">
+            <h2 className="text-2xl font-semibold text-blue-300 mb-6 flex items-center">
+              <span className="mr-3">📋</span>
+              Generated Patrol Assignments
+            </h2>
+            
+            {/* Summary */}
+            <div className="mb-8 p-6 bg-blue-900/20 rounded-lg border border-blue-500/30 backdrop-blur-sm">
+              <h3 className="font-medium text-blue-300 mb-4 text-lg">Summary</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-300">{generatedAssignments.summary.totalAssignments}</div>
+                  <div className="text-blue-400">Total Assignments</div>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="text-blue-400">Incidents Nearby:</span>
-                    <span className="text-blue-200 ml-2">{assignment.incidentPriority?.incidentCount ?? 'N/A'}</span>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-300">
+                    {typeof generatedAssignments.summary.coverage === 'number' ? generatedAssignments.summary.coverage.toFixed(1) : 'N/A'}%
                   </div>
-                  <div>
-                    <span className="text-blue-400">Route Efficiency:</span>
-                    <span className="text-blue-200 ml-2">{typeof assignment.efficiency?.efficiency === 'number' ? assignment.efficiency.efficiency.toFixed(2) : 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-blue-400">Time Multiplier:</span>
-                    <span className="text-blue-200 ml-2">{typeof assignment.timeMultiplier === 'number' ? assignment.timeMultiplier.toFixed(1) + 'x' : 'N/A'}</span>
-                  </div>
+                  <div className="text-blue-400">Coverage</div>
                 </div>
-
-                <div className="mt-3 text-xs text-blue-400">
-                  <span>Start: {assignment.startTime ? new Date(assignment.startTime).toLocaleString() : 'N/A'}</span>
-                  <span className="mx-2">•</span>
-                  <span>End: {assignment.endTime ? new Date(assignment.endTime).toLocaleString() : 'N/A'}</span>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-300">
+                    {typeof generatedAssignments.summary.averageScore === 'number' ? generatedAssignments.summary.averageScore.toFixed(2) : 'N/A'}
+                  </div>
+                  <div className="text-blue-400">Average Score</div>
                 </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-yellow-300">{generatedAssignments.summary.totalOfficers}</div>
+                  <div className="text-blue-400">Total Officers</div>
+                </div>
+                {generatedAssignments.summary.routesCreated > 0 && (
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-300">{generatedAssignments.summary.routesCreated}</div>
+                    <div className="text-blue-400">Routes Created</div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            </div>
 
-          {/* Newly Created Routes */}
-          {generatedAssignments.newlyCreatedRoutes && generatedAssignments.newlyCreatedRoutes.length > 0 && (
-            <div className="mt-6 p-4 bg-green-900/20 border border-green-500/30 rounded-md">
-              <h3 className="font-medium text-green-300 mb-3">Newly Created Routes</h3>
-              <div className="space-y-3">
-                {generatedAssignments.newlyCreatedRoutes.map((routeInfo, index) => (
-                  <div key={index} className="p-3 bg-green-900/10 border border-green-500/20 rounded-md">
-                    <div className="flex items-start justify-between">
+            {/* Assignments */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-blue-300">Assignments</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {generatedAssignments.assignments.map((assignment, index) => (
+                  <div key={index} className="p-6 border border-blue-900/30 rounded-lg bg-slate-800/30 backdrop-blur-sm hover:bg-slate-700/30 transition-colors">
+                    <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h4 className="font-medium text-green-300">{routeInfo.route.name}</h4>
-                        <p className="text-sm text-green-400">{routeInfo.route.description}</p>
-                        <p className="text-xs text-green-500 mt-1">Reason: {routeInfo.reason}</p>
+                        <h4 className="font-medium text-blue-300 text-lg">{assignment.route.name}</h4>
+                        <p className="text-sm text-blue-400">Assigned to: {assignment.officer.name}</p>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-green-400">Incident: {routeInfo.incident.title}</div>
-                        <div className="text-xs text-green-500">{routeInfo.incident.severity} severity</div>
+                        <div className="text-2xl font-bold text-blue-300">
+                          {typeof assignment.score === 'number' ? assignment.score.toFixed(2) : 'N/A'}
+                        </div>
+                        <div className="text-xs text-blue-400">Priority Score</div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">Incidents Nearby:</span>
+                        <span className="text-blue-200">{assignment.incidentPriority?.incidentCount ?? 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">Route Efficiency:</span>
+                        <span className="text-blue-200">
+                          {typeof assignment.efficiency?.efficiency === 'number' ? assignment.efficiency.efficiency.toFixed(2) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">Time Multiplier:</span>
+                        <span className="text-blue-200">
+                          {typeof assignment.timeMultiplier === 'number' ? assignment.timeMultiplier.toFixed(1) + 'x' : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-blue-900/30 text-xs text-blue-400">
+                      <div className="flex justify-between">
+                        <span>Start: {assignment.startTime ? new Date(assignment.startTime).toLocaleString() : 'N/A'}</span>
+                        <span>End: {assignment.endTime ? new Date(assignment.endTime).toLocaleString() : 'N/A'}</span>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
 
-          <div className="space-y-4">
+            {/* Newly Created Routes */}
+            {generatedAssignments.newlyCreatedRoutes && generatedAssignments.newlyCreatedRoutes.length > 0 && (
+              <div className="mt-8 p-6 bg-green-900/20 border border-green-500/30 rounded-lg backdrop-blur-sm">
+                <h3 className="font-medium text-green-300 mb-4 text-lg flex items-center">
+                  <span className="mr-2">🆕</span>
+                  Newly Created Routes
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {generatedAssignments.newlyCreatedRoutes.map((routeInfo, index) => (
+                    <div key={index} className="p-4 bg-green-900/10 border border-green-500/20 rounded-lg backdrop-blur-sm">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-medium text-green-300">{routeInfo.route.name}</h4>
+                          <p className="text-sm text-green-400">{routeInfo.route.description}</p>
+                          <p className="text-xs text-green-500 mt-2">Reason: {routeInfo.reason}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-green-400">Incident: {routeInfo.incident.title}</div>
+                          <div className="text-xs text-green-500">{routeInfo.incident.severity} severity</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-slate-800/90 p-8 rounded-xl border border-blue-500/30">
+              <div className="flex items-center space-x-4">
+                <Spinner size="lg" />
+                <div className="text-blue-300 text-lg">Processing...</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

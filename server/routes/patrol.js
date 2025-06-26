@@ -7,7 +7,8 @@ const {
   deletePatrol,
   startPatrol,
   getDashboardStats,
-  getActivePatrols
+  getActivePatrols,
+  trackPatrolLocation
 } = require('../controllers/patrol');
 const {
   createPatrolLog,
@@ -92,5 +93,8 @@ router.put('/:id/start', startPatrol);
 router.route('/:patrolId/logs')
   .get(getPatrolLogs)
   .post(createPatrolLog);
+
+// Track officer location
+router.post('/:id/track', trackPatrolLocation);
 
 module.exports = router; 

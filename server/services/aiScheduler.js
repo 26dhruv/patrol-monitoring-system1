@@ -144,7 +144,12 @@ class AIScheduler {
    */
   calculateRouteEfficiency(route) {
     if (!route.checkpoints || route.checkpoints.length < 2) {
-      return 0;
+      return {
+        distance: 0,
+        checkpointDensity: 0,
+        estimatedDuration: 15,
+        efficiency: 0
+      };
     }
 
     // Calculate total distance and checkpoint density
@@ -152,23 +157,31 @@ class AIScheduler {
     for (let i = 1; i < route.checkpoints.length; i++) {
       const prev = route.checkpoints[i - 1];
       const curr = route.checkpoints[i];
-      totalDistance += this.calculateDistance(
-        prev.coordinates.latitude,
-        prev.coordinates.longitude,
-        curr.coordinates.latitude,
-        curr.coordinates.longitude
-      );
+      
+      // Ensure coordinates exist
+      if (prev.coordinates?.latitude && prev.coordinates?.longitude && 
+          curr.coordinates?.latitude && curr.coordinates?.longitude) {
+        totalDistance += this.calculateDistance(
+          prev.coordinates.latitude,
+          prev.coordinates.longitude,
+          curr.coordinates.latitude,
+          curr.coordinates.longitude
+        );
+      }
     }
 
     // Efficiency based on checkpoint density and route length
     const checkpointDensity = route.checkpoints.length / Math.max(totalDistance, 1);
     const estimatedDuration = route.estimatedDuration || (route.checkpoints.length * 15);
     
+    // Ensure efficiency is a valid number
+    const efficiency = isNaN(checkpointDensity) ? 0 : checkpointDensity * (60 / Math.max(estimatedDuration, 1));
+    
     return {
-      distance: totalDistance,
-      checkpointDensity,
-      estimatedDuration,
-      efficiency: checkpointDensity * (60 / Math.max(estimatedDuration, 1)) // checkpoints per hour
+      distance: totalDistance || 0,
+      checkpointDensity: checkpointDensity || 0,
+      estimatedDuration: estimatedDuration || 15,
+      efficiency: efficiency || 0
     };
   }
 
@@ -263,75 +276,116 @@ class AIScheduler {
         for (const incident of openIncidents) {
           // Check if incident has coordinates
           if (incident.coordinates?.latitude && incident.coordinates?.longitude) {
-            // Always create a new route for each incident (ignore existing routes)
-            const newRoute = await PatrolRoute.create({
-              name: `Incident Response: ${incident.area || 'Unknown Area'}`,
-              description: `Auto-generated route for incident at ${incident.area || 'Unknown Area'}`,
-              checkpoints: [
-                {
-                  name: incident.area || 'Incident Location',
-                  description: `Incident location: ${incident.title}`,
-                  coordinates: {
-                    latitude: incident.coordinates.latitude,
-                    longitude: incident.coordinates.longitude
-                  },
-                  geofenceRadius: 100, // Larger radius for incident areas
-                  estimatedTime: 15,
-                  order: 1,
-                  requirements: {
-                    scanQrCode: false,
-                    takePhoto: true,
-                    writeReport: true,
-                    signature: false
-                  },
-                  isActive: true
+            // Check if any existing route already covers this incident location
+            const existingRouteCoversIncident = patrolRoutes.some(route => {
+              // Check if any checkpoint in the route is close to the incident
+              return route.checkpoints.some(checkpoint => {
+                if (checkpoint.coordinates?.latitude && checkpoint.coordinates?.longitude) {
+                  const distance = this.calculateDistance(
+                    incident.coordinates.latitude,
+                    incident.coordinates.longitude,
+                    checkpoint.coordinates.latitude,
+                    checkpoint.coordinates.longitude
+                  );
+                  // Consider covered if within 1km of any checkpoint
+                  return distance <= 1;
                 }
-              ],
-              totalDistance: 0,
-              estimatedDuration: 15,
-              difficulty: 'medium',
-              securityLevel: 'high',
-              isActive: true,
-              createdBy: officers[0]._id,
-              notes: `Auto-created for incident: ${incident.title} (${incident.severity} severity)`
+                return false;
+              });
             });
-            patrolRoutes.push(newRoute);
-            newlyCreatedRoutes.push({
-              route: newRoute,
-              incident: incident,
-              reason: 'Created new route for incident area'
-            });
+
+            // Only create new route if no existing route covers this incident
+            if (!existingRouteCoversIncident) {
+              const newRoute = await PatrolRoute.create({
+                name: `Incident Response: ${incident.area || 'Unknown Area'}`,
+                description: `Auto-generated route for incident at ${incident.area || 'Unknown Area'}`,
+                checkpoints: [
+                  {
+                    name: incident.area || 'Incident Location',
+                    description: `Incident location: ${incident.title}`,
+                    coordinates: {
+                      latitude: incident.coordinates.latitude,
+                      longitude: incident.coordinates.longitude
+                    },
+                    geofenceRadius: 100, // Larger radius for incident areas
+                    estimatedTime: 15,
+                    order: 1,
+                    requirements: {
+                      scanQrCode: false,
+                      takePhoto: true,
+                      writeReport: true,
+                      signature: false
+                    },
+                    isActive: true
+                  }
+                ],
+                totalDistance: 0,
+                estimatedDuration: 15,
+                difficulty: 'medium',
+                securityLevel: 'high',
+                isActive: true,
+                createdBy: officers[0]._id,
+                notes: `Auto-created for incident: ${incident.title} (${incident.severity} severity)`,
+                // Store incident information for priority sorting
+                incidentSeverity: incident.severity,
+                incidentTitle: incident.title,
+                incidentId: incident._id
+              });
+              patrolRoutes.push(newRoute);
+              newlyCreatedRoutes.push({
+                route: newRoute,
+                incident: incident,
+                reason: 'Created new route for incident area - no existing route coverage'
+              });
+            } else {
+              // Log that incident is already covered
+              console.log(`Incident "${incident.title}" at ${incident.area} is already covered by existing routes`);
+            }
           } else {
             // Fallback to area-based matching for incidents without coordinates
             const area = incident.area?.trim().toLowerCase();
             if (!area) continue;
             
-            // Always create a new route for this area (ignore existing routes)
-            const newRoute = await PatrolRoute.create({
-              name: `Incident Response: ${incident.area}`,
-              description: `Auto-generated route for incident at ${incident.area}`,
-              checkpoints: [
-                {
-                  name: incident.area,
-                  description: `Incident location: ${incident.area}`,
-                  coordinates: { latitude: 23.03, longitude: 72.58 }, // Default Ahmedabad coordinates
-                  geofenceRadius: 50,
-                  estimatedTime: 10,
-                  order: 1,
-                  requirements: {},
-                  isActive: true
-                }
-              ],
-              isActive: true,
-              createdBy: officers[0]._id,
-              notes: `Auto-created for incident: ${incident.title}`
-            });
-            patrolRoutes.push(newRoute);
-            newlyCreatedRoutes.push({
-              route: newRoute,
-              incident: incident,
-              reason: 'Created new route for incident area'
-            });
+            // Check if any existing route covers this area by name
+            const existingRouteCoversArea = patrolRoutes.some(route =>
+              route.checkpoints.some(cp => cp.name.trim().toLowerCase() === area)
+            );
+            
+            // Only create new route if no existing route covers this area
+            if (!existingRouteCoversArea) {
+              const newRoute = await PatrolRoute.create({
+                name: `Incident Response: ${incident.area}`,
+                description: `Auto-generated route for incident at ${incident.area}`,
+                checkpoints: [
+                  {
+                    name: incident.area,
+                    description: `Incident location: ${incident.area}`,
+                    coordinates: { latitude: 23.03, longitude: 72.58 }, // Default Ahmedabad coordinates
+                    geofenceRadius: 50,
+                    estimatedTime: 10,
+                    order: 1,
+                    requirements: {},
+                    isActive: true
+                  }
+                ],
+                isActive: true,
+                createdBy: officers[0]._id,
+                notes: `Auto-created for incident: ${incident.title}`,
+                // Store incident information for priority sorting
+                incidentSeverity: incident.severity,
+                incidentTitle: incident.title,
+                incidentId: incident._id
+              });
+              patrolRoutes.push(newRoute);
+              newlyCreatedRoutes.push({
+                route: newRoute,
+                incident: incident,
+                reason: 'Created new route for incident area - no existing route coverage'
+              });
+            } else {
+              // Log that incident area is already covered
+              console.log(`Incident area "${incident.area}" is already covered by existing routes`);
+            }
           }
         }
       }
@@ -347,62 +401,60 @@ class AIScheduler {
         const efficiency = this.calculateRouteEfficiency(route);
         const timeMultiplier = this.getTimeMultiplier(startTime.getHours());
 
-        const totalScore = (
-          incidentPriority.priority * this.factors.incidentPriority +
-          efficiency.efficiency * this.factors.routeEfficiency +
-          timeMultiplier * this.factors.timeOfDay
-        );
+        // Ensure all values are numbers and provide fallbacks
+        const incidentScore = (incidentPriority.priority || 0) * this.factors.incidentPriority;
+        const efficiencyScore = (efficiency.efficiency || 0) * this.factors.routeEfficiency;
+        const timeScore = (timeMultiplier || 1) * this.factors.timeOfDay;
+
+        const totalScore = incidentScore + efficiencyScore + timeScore;
 
         routeScores.push({
           route,
-          score: totalScore,
-          incidentPriority,
-          efficiency,
-          timeMultiplier
+          score: totalScore || 0, // Ensure score is never NaN
+          incidentPriority: {
+            priority: incidentPriority.priority || 0,
+            incidentCount: incidentPriority.incidentCount || 0,
+            averagePriority: incidentPriority.averagePriority || 0
+          },
+          efficiency: {
+            distance: efficiency.distance || 0,
+            checkpointDensity: efficiency.checkpointDensity || 0,
+            estimatedDuration: efficiency.estimatedDuration || 0,
+            efficiency: efficiency.efficiency || 0
+          },
+          timeMultiplier: timeMultiplier || 1
         });
       }
 
-      // Sort routes by score (highest first)
-      routeScores.sort((a, b) => b.score - a.score);
+      // Sort routes by incident severity (critical > high > medium > low) before assignment
+      const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+      routeScores.sort((a, b) => {
+        // Use stored incident severity for AI-created routes, fallback to medium for manual routes
+        const aSeverity = a.route.incidentSeverity || 'medium';
+        const bSeverity = b.route.incidentSeverity || 'medium';
+        return (severityOrder[bSeverity] || 0) - (severityOrder[aSeverity] || 0);
+      });
 
       // Get officer workload data
       const officerWorkload = await this.getOfficerWorkload(officers, startTime, endTime);
 
-      // Assign routes to officers using greedy algorithm (lowest workload first)
+      // Assign routes to officers using round-robin if there are more routes than officers
       const assignments = [];
-      const assignedOfficers = new Set();
-
-      for (const routeScore of routeScores.slice(0, maxRoutes)) {
-        // Find best available officer for this route (lowest workload)
-        let bestOfficer = null;
-        let bestScore = -1;
-
-        for (const workload of officerWorkload) {
-          if (assignedOfficers.has(workload.officer._id.toString())) {
-            continue;
-          }
-
-          // Calculate assignment score (prefer lowest workload)
-          const assignmentScore = routeScore.score * workload.availability / (1 + workload.workloadScore);
-          
-          if (assignmentScore > bestScore) {
-            bestScore = assignmentScore;
-            bestOfficer = workload;
-          }
-        }
-
-        if (bestOfficer) {
-          assignments.push({
-            route: routeScore.route,
-            officer: bestOfficer.officer,
-            score: bestScore,
-            incidentPriority: routeScore.incidentPriority,
-            efficiency: routeScore.efficiency,
-            startTime,
-            endTime
-          });
-          assignedOfficers.add(bestOfficer.officer._id.toString());
-        }
+      let officerIndex = 0;
+      const totalRoutesToAssign = Math.min(routeScores.length, maxRoutes);
+      for (let i = 0; i < totalRoutesToAssign; i++) {
+        const routeScore = routeScores[i];
+        const officer = officerWorkload[officerIndex % officerWorkload.length].officer;
+        assignments.push({
+          route: routeScore.route,
+          officer,
+          score: routeScore.score,
+          incidentPriority: routeScore.incidentPriority,
+          efficiency: routeScore.efficiency,
+          startTime,
+          endTime
+        });
+        officerIndex++;
       }
 
       return {

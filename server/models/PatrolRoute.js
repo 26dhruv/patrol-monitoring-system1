@@ -101,21 +101,33 @@ const PatrolRouteSchema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    // Incident information for AI-created routes
+    incidentSeverity: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'critical'],
+    },
+    incidentTitle: {
+      type: String,
+    },
+    incidentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Incident',
+    },
   },
   { timestamps: true }
 );
 
 // Create compound index for unique routes (from location to to location)
-PatrolRouteSchema.index(
-  { 
-    'checkpoints.0.name': 1, 
-    [`checkpoints.${PatrolRouteSchema.path('checkpoints').schema.paths.length - 1}.name`]: 1 
-  }, 
-  { 
-    unique: true,
-    partialFilterExpression: { isActive: true }
-  }
-);
+// PatrolRouteSchema.index(
+//   { 
+//     'checkpoints.0.name': 1, 
+//     [`checkpoints.${PatrolRouteSchema.path('checkpoints').schema.paths.length - 1}.name`]: 1 
+//   }, 
+//   { 
+//     unique: true,
+//     partialFilterExpression: { isActive: true }
+//   }
+// );
 
 // Calculate total distance and duration when checkpoints are updated
 PatrolRouteSchema.pre('save', function(next) {
@@ -134,8 +146,7 @@ PatrolRouteSchema.pre('save', function(next) {
 // Static method to check if a route already exists
 PatrolRouteSchema.statics.checkRouteExists = async function(fromLocation, toLocation) {
   const route = await this.findOne({
-    'checkpoints.0.name': fromLocation,
-    [`checkpoints.${this.schema.paths.checkpoints.schema.paths.length - 1}.name`]: toLocation,
+    name: `${fromLocation} to ${toLocation}`,
     isActive: true
   });
   return route;

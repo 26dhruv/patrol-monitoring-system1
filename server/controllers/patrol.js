@@ -698,4 +698,37 @@ exports.getActivePatrols = async (req, res, next) => {
       error: 'Server Error'
     });
   }
+};
+
+// @desc    Track officer location and append to patrolPath
+// @route   POST /api/patrol/:id/track
+// @access  Private (Officer assigned to patrol)
+exports.trackPatrolLocation = async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.body;
+    const patrolId = req.params.id;
+    const userId = req.user.userId;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ success: false, error: 'Latitude and longitude are required.' });
+    }
+
+    // Find patrol and check if officer is assigned
+    const patrol = await Patrol.findById(patrolId);
+    if (!patrol) {
+      return res.status(404).json({ success: false, error: 'Patrol not found.' });
+    }
+    if (!patrol.assignedOfficers.map(id => id.toString()).includes(userId)) {
+      return res.status(403).json({ success: false, error: 'You are not assigned to this patrol.' });
+    }
+
+    // Append location to patrolPath
+    patrol.patrolPath.push({ latitude, longitude, timestamp: new Date() });
+    await patrol.save();
+
+    res.status(200).json({ success: true, message: 'Location tracked.', data: patrol.patrolPath });
+  } catch (error) {
+    console.error('Error tracking patrol location:', error);
+    res.status(500).json({ success: false, error: 'Server error.' });
+  }
 }; 
