@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL;
 
 console.log('🔗 API URL configured as:', API_URL);
 
@@ -164,16 +164,11 @@ export const patrolService = {
     // Make the actual API call
     return api.get(`/patrol/officer/${officerId}`)
       .then(response => {
-        console.log('Officer patrols API response:', response.status, response.data);
         return response;
       })
       .catch(error => {
         // Enhanced error logging
-        console.error(`Error fetching officer patrols:`, error.message);
-        if (error.response) {
-          console.error('Error response status:', error.response.status);
-          console.error('Error response data:', error.response.data);
-        }
+       
         // If the endpoint doesn't exist, we'll return a structured error for better handling
         throw new Error(`Failed to fetch officer patrols: ${error.message}`);
       });
@@ -225,6 +220,16 @@ export const incidentService = {
   assignIncident: (id, officerIds) => api.patch(`/incidents/${id}/assign`, { assignedTo: officerIds }),
   updateStatus: (id, status) => api.patch(`/incidents/${id}/status`, { status }),
   getIncidentStats: (params) => api.get('/incidents/stats', { params }),
+};
+
+// Reports services
+export const reportsService = {
+  getReports: (params) => api.get('/reports', { params }),
+  getReportStats: (params) => api.get('/reports/stats', { params }),
+  downloadReport: (params) => api.get('/reports/download', { 
+    params,
+    responseType: 'blob'
+  }),
 };
 
 // AI Scheduler services

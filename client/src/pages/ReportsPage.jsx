@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { reportsService } from '../services/api';
 import { FaFileDownload, FaChartBar, FaCalendarAlt, FaFilter } from 'react-icons/fa';
 import { toast } from 'react-toastify';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -20,12 +20,10 @@ const ReportsPage = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/reports', {
-        params: {
-          type: reportType,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        }
+      const response = await reportsService.getReports({
+        type: reportType,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
       });
       // Ensure reports is always an array
       const reportsData = Array.isArray(response.data) ? response.data : [];
@@ -41,13 +39,10 @@ const ReportsPage = () => {
 
   const downloadReport = async (type) => {
     try {
-      const response = await axios.get(`/api/reports/download`, {
-        params: {
-          type,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        },
-        responseType: 'blob'
+      const response = await reportsService.downloadReport({
+        type,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
       });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -62,6 +57,13 @@ const ReportsPage = () => {
       console.error('Error downloading report:', error);
       toast.error('Failed to download report');
     }
+  };
+
+  // Helper function to safely format dates
+  const safeFormatDate = (dateString, formatString = 'MMM dd, yyyy HH:mm') => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return isValid(date) ? format(date, formatString) : 'Invalid Date';
   };
 
   const renderReportData = () => {
@@ -81,31 +83,51 @@ const ReportsPage = () => {
               <thead className="bg-[#0a2440]">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Patrol ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Officer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Patrol Route</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Officers</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Start Time</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">End Time</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Priority</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-900/30">
                 {reports.map((report) => (
                   <tr key={report._id} className="hover:bg-[#0a2440]/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">{report._id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.location?.name || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
-                      {report.assignedOfficers?.map(officer => officer.name).join(', ') || 'Unassigned'}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">
+                      {report._id ? report._id.substring(0, 8) + '...' : 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{format(new Date(report.startTime), 'MMM dd, yyyy HH:mm')}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
-                      {report.endTime ? format(new Date(report.endTime), 'MMM dd, yyyy HH:mm') : 'Ongoing'}
+                      {report.patrolRoute?.name || report.title || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                      {report.assignedOfficers?.length > 0 
+                        ? report.assignedOfficers.map(officer => officer.name || officer).join(', ')
+                        : 'Unassigned'
+                      }
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                      {safeFormatDate(report.startTime)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">
+                      {report.endTime ? safeFormatDate(report.endTime) : 'Ongoing'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                         ${report.status === 'completed' ? 'bg-green-900/50 text-green-300' : 
                           report.status === 'in-progress' ? 'bg-blue-900/50 text-blue-300' : 
+                          report.status === 'cancelled' ? 'bg-red-900/50 text-red-300' :
                           'bg-yellow-900/50 text-yellow-300'}`}>
-                        {report.status}
+                        {report.status || 'scheduled'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        ${report.priority === 'high' ? 'bg-red-900/50 text-red-300' : 
+                          report.priority === 'urgent' ? 'bg-purple-900/50 text-purple-300' :
+                          report.priority === 'medium' ? 'bg-yellow-900/50 text-yellow-300' : 
+                          'bg-green-900/50 text-green-300'}`}>
+                        {report.priority || 'medium'}
                       </span>
                     </td>
                   </tr>
@@ -134,17 +156,19 @@ const ReportsPage = () => {
               <tbody className="divide-y divide-blue-900/30">
                 {reports.map((report) => (
                   <tr key={report._id} className="hover:bg-[#0a2440]/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">{report._id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">
+                      {report._id ? report._id.substring(0, 8) + '...' : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.title || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.location?.name || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.reportedBy?.name || 'Unknown'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{format(new Date(report.date), 'MMM dd, yyyy HH:mm')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{safeFormatDate(report.date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                         ${report.severity === 'high' ? 'bg-red-900/50 text-red-300' : 
                           report.severity === 'medium' ? 'bg-yellow-900/50 text-yellow-300' : 
                           'bg-green-900/50 text-green-300'}`}>
-                        {report.severity}
+                        {report.severity || 'low'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -152,7 +176,7 @@ const ReportsPage = () => {
                         ${report.status === 'resolved' ? 'bg-green-900/50 text-green-300' : 
                           report.status === 'in-progress' ? 'bg-blue-900/50 text-blue-300' : 
                           'bg-yellow-900/50 text-yellow-300'}`}>
-                        {report.status}
+                        {report.status || 'pending'}
                       </span>
                     </td>
                   </tr>
@@ -181,10 +205,12 @@ const ReportsPage = () => {
               <tbody className="divide-y divide-blue-900/30">
                 {reports.map((report) => (
                   <tr key={report._id} className="hover:bg-[#0a2440]/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">{report._id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.role}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-100">
+                      {report._id ? report._id.substring(0, 8) + '...' : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.name || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.email || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.role || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.patrolsCompleted || 0}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-200">{report.incidentsReported || 0}</td>
                     <td className="px-6 py-4 whitespace-nowrap">

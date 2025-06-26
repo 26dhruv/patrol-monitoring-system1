@@ -16,6 +16,7 @@ const {
 } = require('../controllers/patrol');
 const { authenticateUser, authorizeRoles } = require('../middleware/auth');
 const PatrolStatusManager = require('../services/patrolStatusManager');
+const Patrol = require('../models/Patrol');
 
 const router = express.Router();
 const patrolStatusManager = new PatrolStatusManager();
@@ -125,6 +126,71 @@ router.post('/conflicts/check', async (req, res) => {
 
 // Admin/Manager routes - STATIC ROUTES FIRST
 router.post('/', authorizeRoles('admin', 'manager'), createPatrol);
+
+// Officer-specific routes - STATIC ROUTES FIRST
+router.get('/officer/:officerId', async (req, res) => {
+  try {
+    const { officerId } = req.params;
+    const { page = 1, limit = 10, sort = '-createdAt', status, startDate, endDate, search } = req.query;
+
+    // Build query
+    let query = { assignedOfficers: officerId };
+
+    // Add filters
+    if (status) query.status = status;
+    if (startDate || endDate) {
+      query.startTime = {};
+      if (startDate) query.startTime.$gte = new Date(startDate);
+      if (endDate) query.startTime.$lte = new Date(endDate);
+    }
+
+    // Handle search
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get total count
+    const total = await Patrol.countDocuments(query);
+
+    // Execute query with pagination
+    const patrols = await Patrol.find(query)
+      .populate('assignedOfficers', 'name email badgeNumber')
+      .populate('assignedBy', 'name email')
+      .populate('patrolRoute', 'name description checkpoints')
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / limitNum);
+
+    res.status(200).json({
+      success: true,
+      data: patrols,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        total,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching officer patrols:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch officer patrols'
+    });
+  }
+});
 
 // DYNAMIC ROUTES LAST - These must come after all static routes
 router.get('/:id', getPatrol);
