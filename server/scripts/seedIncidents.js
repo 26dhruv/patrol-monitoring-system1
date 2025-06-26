@@ -5,147 +5,196 @@ const User = require('../models/User');
 
 const MONGO_URI = process.env.MONGO_URI;
 
-// Sample incidents data for Ahmedabad
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
 const sampleIncidents = [
   {
-    title: 'Suspicious Activity at Law Garden',
-    description: 'Multiple reports of suspicious individuals loitering around Law Garden area',
-    category: 'security',
-    severity: 'medium',
-    status: 'new',
-    date: new Date(),
-    time: '14:30',
-    area: 'Law Garden',
-    reportedBy: null, // Will be set to first user
-    assignedTo: [],
-    notes: [{
-      content: 'Area needs increased patrol presence',
-      addedBy: null // Will be set to first user
-    }]
-  },
-  {
-    title: 'Traffic Violation at Satellite',
-    description: 'Reckless driving and traffic rule violations reported in Satellite area',
-    category: 'other',
-    severity: 'high',
-    status: 'in-progress',
-    date: new Date(),
-    time: '16:45',
+    title: 'Suspicious Activity at Satellite Road',
+    description: 'Multiple individuals loitering around the ISRO Satellite Center area. Security personnel reported unusual behavior near the main entrance.',
     area: 'Satellite',
-    reportedBy: null,
-    assignedTo: [],
-    notes: [{
-      content: 'Requires immediate attention from traffic police',
-      addedBy: null
-    }]
+    coordinates: {
+      latitude: 23.0330,
+      longitude: 72.5850
+    },
+    category: 'security',
+    severity: 'high',
+    status: 'reported',
+    time: '14:30',
+    witnesses: [
+      {
+        name: 'Rajesh Patel',
+        contact: '+91-9876543210',
+        statement: 'Saw 3-4 people taking photos of the building from different angles'
+      }
+    ],
+    involvedPersons: [
+      {
+        name: 'Unknown individuals',
+        description: '3-4 people in casual clothing',
+        role: 'suspect'
+      }
+    ]
   },
   {
-    title: 'Vandalism at Vastrapur Lake',
-    description: 'Public property vandalism reported near Vastrapur Lake',
-    category: 'vandalism',
-    severity: 'low',
-    status: 'new',
-    date: new Date(),
-    time: '09:15',
-    area: 'Vastrapur Lake',
-    reportedBy: null,
-    assignedTo: [],
-    notes: [{
-      content: 'Minor damage to park benches',
-      addedBy: null
-    }]
-  },
-  {
-    title: 'Medical Emergency at Navrangpura',
-    description: 'Medical emergency requiring police assistance for traffic management',
+    title: 'Medical Emergency at Law Garden',
+    description: 'Elderly person collapsed near the main entrance. Immediate medical attention required.',
+    area: 'Law Garden',
+    coordinates: {
+      latitude: 23.0225,
+      longitude: 72.5714
+    },
     category: 'medical',
     severity: 'critical',
-    status: 'new',
-    date: new Date(),
-    time: '11:20',
-    area: 'Navrangpura',
-    reportedBy: null,
-    assignedTo: [],
-    notes: [{
-      content: 'Ambulance stuck in traffic, need police escort',
-      addedBy: null
-    }]
+    status: 'investigating',
+    time: '18:45',
+    witnesses: [
+      {
+        name: 'Priya Sharma',
+        contact: '+91-8765432109',
+        statement: 'The person was walking and suddenly fell down. No visible injuries but unconscious.'
+      }
+    ],
+    involvedPersons: [
+      {
+        name: 'Elderly person (unidentified)',
+        description: 'Male, approximately 65-70 years old',
+        role: 'victim'
+      }
+    ]
   },
   {
-    title: 'Theft Attempt at CG Road',
-    description: 'Attempted theft reported at commercial establishment on CG Road',
+    title: 'Vehicle Theft at Ahmedabad Railway Station',
+    description: 'Motorcycle stolen from parking area near platform 1. Owner reported missing vehicle after returning from trip.',
+    area: 'Ahmedabad Railway Station',
+    coordinates: {
+      latitude: 23.0272644,
+      longitude: 72.6015853
+    },
     category: 'theft',
     severity: 'medium',
-    status: 'in-progress',
-    date: new Date(),
-    time: '13:10',
-    area: 'CG Road',
-    reportedBy: null,
-    assignedTo: [],
-    notes: [{
-      content: 'Suspects fled the scene, area needs monitoring',
-      addedBy: null
-    }]
+    status: 'investigating',
+    time: '09:15',
+    witnesses: [
+      {
+        name: 'Amit Kumar',
+        contact: '+91-7654321098',
+        statement: 'Saw someone suspicious near the parking area around 9 AM'
+      }
+    ],
+    involvedPersons: [
+      {
+        name: 'Vehicle owner',
+        description: 'Mr. Suresh Mehta - motorcycle owner',
+        role: 'victim'
+      },
+      {
+        name: 'Unknown thief',
+        description: 'Person seen near parking area',
+        role: 'suspect'
+      }
+    ]
+  },
+  {
+    title: 'Fire Alarm at Mansi Circle',
+    description: 'Fire alarm triggered in commercial building. Fire department responded. False alarm confirmed.',
+    area: 'Mansi Circle',
+    coordinates: {
+      latitude: 23.0328215,
+      longitude: 72.5253767
+    },
+    category: 'fire',
+    severity: 'medium',
+    status: 'resolved',
+    time: '11:20',
+    witnesses: [
+      {
+        name: 'Building Security',
+        contact: '+91-6543210987',
+        statement: 'Alarm went off due to smoke from kitchen in restaurant on 3rd floor'
+      }
+    ],
+    involvedPersons: [
+      {
+        name: 'Restaurant staff',
+        description: 'Kitchen staff at 3rd floor restaurant',
+        role: 'other'
+      }
+    ]
+  },
+  {
+    title: 'Vandalism at Sabarmati Ashram',
+    description: 'Graffiti found on the outer wall of the historical site. Security cameras captured the incident.',
+    area: 'Sabarmati Ashram',
+    coordinates: {
+      latitude: 23.0601651,
+      longitude: 72.5806382
+    },
+    category: 'vandalism',
+    severity: 'low',
+    status: 'reported',
+    time: '22:30',
+    witnesses: [
+      {
+        name: 'Security Guard',
+        contact: '+91-5432109876',
+        statement: 'Found spray paint on the wall during night patrol'
+      }
+    ],
+    involvedPersons: [
+      {
+        name: 'Unknown vandals',
+        description: '2-3 people seen on security footage',
+        role: 'suspect'
+      }
+    ]
   }
 ];
 
-async function seedIncidents() {
+const seedIncidents = async () => {
   try {
-    console.log('🔗 Connecting to MongoDB...');
-    const conn = await mongoose.connect(MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
-    console.log(`✅ Connected to MongoDB: ${conn.connection.host}`);
-
-    // Clear existing incidents
+    console.log('🗑️  Deleting all existing incidents...');
     await Incident.deleteMany({});
-    console.log('🗑️  Cleared existing incidents');
+    console.log('✅ All incidents deleted successfully');
 
-    // Get first user as reporter
-    const firstUser = await User.findOne();
-    if (!firstUser) {
-      throw new Error('No users found in database. Please run seedUsers.js first.');
+    // Get a user to assign as reporter
+    const user = await User.findOne({ role: 'officer' });
+    if (!user) {
+      console.error('❌ No officer found in database. Please create users first.');
+      process.exit(1);
     }
 
-    // Get first location for incidents
-    const Location = require('../models/Location');
-    const firstLocation = await Location.findOne();
-    if (!firstLocation) {
-      console.log('⚠️  No locations found. Creating incidents without location reference.');
+    console.log('🌱 Creating new incidents...');
+    
+    for (const incidentData of sampleIncidents) {
+      const incident = new Incident({
+        ...incidentData,
+        date: new Date(),
+        reportedBy: user._id
+      });
+      
+      await incident.save();
+      console.log(`✅ Created incident: ${incident.title} at ${incident.area}`);
     }
 
-    // Create incidents with proper references
-    const incidentsWithRefs = sampleIncidents.map(incident => ({
-      ...incident,
-      reportedBy: firstUser._id,
-      notes: incident.notes.map(note => ({
-        ...note,
-        addedBy: firstUser._id
-      }))
-    }));
-
-    const createdIncidents = await Incident.insertMany(incidentsWithRefs);
-    console.log(`✅ Created ${createdIncidents.length} sample incidents`);
-
-    // Display created incidents
-    console.log('\n📋 Created Incidents:');
-    createdIncidents.forEach((incident, index) => {
-      console.log(`${index + 1}. ${incident.title} (${incident.severity} priority) - ${incident.status}`);
-    });
-
-    console.log('\n🎉 Incident seeding completed successfully!');
-    console.log('💡 These incidents will be used by the AI scheduler for route prioritization.');
+    console.log('🎉 Successfully created 5 new incidents with updated logic!');
+    console.log('\n📊 Incident Summary:');
+    console.log('- Satellite: Security incident (High severity)');
+    console.log('- Law Garden: Medical emergency (Critical severity)');
+    console.log('- Railway Station: Vehicle theft (Medium severity)');
+    console.log('- Mansi Circle: Fire alarm (Medium severity, Resolved)');
+    console.log('- Sabarmati Ashram: Vandalism (Low severity)');
 
   } catch (error) {
     console.error('❌ Error seeding incidents:', error);
-    process.exit(1);
   } finally {
-    await mongoose.connection.close();
+    mongoose.connection.close();
     console.log('🔌 Database connection closed');
   }
-}
+};
 
-// Run the seeding function
+// Run the seeding
 seedIncidents(); 

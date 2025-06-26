@@ -19,6 +19,9 @@ router.use(authenticateUser);
 router.get('/', authorizeRoles('admin', 'manager'), getUsers);
 router.get('/officers', authorizeRoles('admin', 'manager'), getOfficers);
 
+// Routes accessible to all authenticated users
+router.get('/officers/available', getOfficers); // For incident assignment
+
 // Routes for specific user
 router.route('/:id')
   .get(getUser)

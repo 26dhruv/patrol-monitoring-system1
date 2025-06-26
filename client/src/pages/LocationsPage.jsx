@@ -297,26 +297,26 @@ const LocationsPage = () => {
                   💡 Tip: Enter place names like "Satellite Ahmedabad", "Law Garden", "ISRO", etc. to automatically get coordinates.
                 </div>
               </div>
-            </div>
-            
-            <div>
-              <label htmlFor="locationType" className="block text-sm font-medium text-blue-300 mb-1">
-                Location Type
-              </label>
-              <select
-                id="locationType"
-                name="locationType"
-                value={formData.locationType}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="checkpoint">Checkpoint</option>
-                <option value="building">Building</option>
-                <option value="entrance">Entrance</option>
-                <option value="perimeter">Perimeter</option>
-                <option value="area">Area</option>
-                <option value="other">Other</option>
-              </select>
+              </div>
+              
+              <div>
+                <label htmlFor="locationType" className="block text-sm font-medium text-blue-300 mb-1">
+                  Location Type
+                </label>
+                <select
+                  id="locationType"
+                  name="locationType"
+                  value={formData.locationType}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="checkpoint">Checkpoint</option>
+                  <option value="building">Building</option>
+                  <option value="entrance">Entrance</option>
+                  <option value="perimeter">Perimeter</option>
+                  <option value="area">Area</option>
+                  <option value="other">Other</option>
+                </select>
             </div>
             
             <div>

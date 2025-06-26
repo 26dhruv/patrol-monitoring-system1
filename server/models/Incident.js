@@ -88,6 +88,21 @@ const IncidentSchema = new Schema({
     required: [true, 'Please provide incident area name'],
     trim: true
   },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'Location',
+    required: false
+  },
+  coordinates: {
+    latitude: {
+      type: Number,
+      required: false
+    },
+    longitude: {
+      type: Number,
+      required: false
+    }
+  },
   category: {
     type: String,
     enum: ['security', 'maintenance', 'medical', 'fire', 'theft', 'vandalism', 'trespassing', 'other'],
@@ -100,8 +115,8 @@ const IncidentSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['new', 'in-progress', 'resolved', 'closed'],
-    default: 'new'
+    enum: ['reported', 'investigating', 'resolved', 'closed'],
+    default: 'reported'
   },
   reportedBy: {
     type: Schema.Types.ObjectId,

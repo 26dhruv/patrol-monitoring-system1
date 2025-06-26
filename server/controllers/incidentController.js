@@ -408,55 +408,55 @@ const getIncidentStats = async (req, res) => {
     }
     // Manager and Admin: show all incidents (no filter)
     
-    // Count total incidents
+  // Count total incidents
     const total = await Incident.countDocuments(baseQuery);
-    
-    // Get counts by status
-    const statusCounts = await Incident.aggregate([
+  
+  // Get counts by status
+  const statusCounts = await Incident.aggregate([
       { $match: baseQuery },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-    
-    // Get counts by severity
-    const severityCounts = await Incident.aggregate([
+    { $group: { _id: '$status', count: { $sum: 1 } } }
+  ]);
+  
+  // Get counts by severity
+  const severityCounts = await Incident.aggregate([
       { $match: baseQuery },
-      { $group: { _id: '$severity', count: { $sum: 1 } } }
-    ]);
-    
-    // Get counts by category
-    const categoryCounts = await Incident.aggregate([
+    { $group: { _id: '$severity', count: { $sum: 1 } } }
+  ]);
+  
+  // Get counts by category
+  const categoryCounts = await Incident.aggregate([
       { $match: baseQuery },
-      { $group: { _id: '$category', count: { $sum: 1 } } }
-    ]);
-    
-    // Get recent incidents
+    { $group: { _id: '$category', count: { $sum: 1 } } }
+  ]);
+  
+  // Get recent incidents
     let recentIncidentsQuery = Incident.find(baseQuery);
     const recentIncidents = await recentIncidentsQuery
-      .sort({ createdAt: -1 })
-      .limit(5)
+    .sort({ createdAt: -1 })
+    .limit(5)
       .populate('location', 'name')
       .populate('assignedTo', 'name');
-    
-    // Format the statistics object
-    const stats = {
-      total,
-      statusCounts: statusCounts.reduce((acc, curr) => {
-        acc[curr._id] = curr.count;
-        return acc;
-      }, {}),
-      severityCounts: severityCounts.reduce((acc, curr) => {
-        acc[curr._id] = curr.count;
-        return acc;
-      }, {}),
-      categoryCounts: categoryCounts.reduce((acc, curr) => {
-        acc[curr._id] = curr.count;
-        return acc;
-      }, {}),
+  
+  // Format the statistics object
+  const stats = {
+    total,
+    statusCounts: statusCounts.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {}),
+    severityCounts: severityCounts.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {}),
+    categoryCounts: categoryCounts.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {}),
       recentIncidents,
       userRole // Include user role for frontend to use
-    };
-    
-    res.status(StatusCodes.OK).json({ data: stats });
+  };
+  
+  res.status(StatusCodes.OK).json({ data: stats });
   } catch (error) {
     console.error('Error fetching incident stats:', error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ 

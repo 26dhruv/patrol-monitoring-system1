@@ -125,7 +125,7 @@ export const userService = {
   createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/users/${id}`),
-  getOfficers: () => api.get('/users/officers'),
+  getOfficers: () => api.get('/users/officers/available'),
   updateUserStatus: (id, status) => api.put(`/users/${id}/status`, { status }),
   getUserLogs: (userId) => api.get(`/users/${userId}/logs`),
 };

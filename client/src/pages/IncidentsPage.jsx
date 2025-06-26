@@ -338,7 +338,7 @@ const IncidentsPage = () => {
                 <th 
                   className="px-4 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider"
                 >
-                  Location
+                  Area
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-blue-300 uppercase tracking-wider">
                   Actions
@@ -383,7 +383,7 @@ const IncidentsPage = () => {
                       {new Date(incident.date).toLocaleDateString()} {incident.time}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-300/70">
-                      {incident.location?.name || 'Unknown'}
+                      {incident.area || 'Unknown'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">

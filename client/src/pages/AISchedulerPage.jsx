@@ -13,7 +13,9 @@ const AISchedulerPage = () => {
     maxRoutes: 5,
     startTime: new Date().toISOString().slice(0, 16),
     endTime: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    autoCreate: false
+    autoCreate: false,
+    includeIncidentAreas: true,
+    createMissingRoutes: false
   });
 
   // State for results and loading
@@ -119,6 +121,11 @@ const AISchedulerPage = () => {
         setSuccess(`Successfully generated and created ${response.data.data.createdCount} patrol assignments!`);
       } else {
         setSuccess(`Successfully generated ${response.data.data.assignments.length} patrol assignments!`);
+      }
+
+      // Show information about newly created routes
+      if (formData.createMissingRoutes && response.data.data.newlyCreatedRoutes?.length > 0) {
+        setSuccess(prev => prev + ` Created ${response.data.data.newlyCreatedRoutes.length} new routes to cover incident areas.`);
       }
 
       // Refresh data
@@ -344,6 +351,32 @@ const AISchedulerPage = () => {
           </label>
         </div>
 
+        <div className="mt-4">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="includeIncidentAreas"
+              checked={formData.includeIncidentAreas}
+              onChange={handleInputChange}
+              className="mr-2"
+            />
+            <span className="text-sm text-blue-300">Include incident areas in patrol routes (creates routes for active incidents)</span>
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="createMissingRoutes"
+              checked={formData.createMissingRoutes}
+              onChange={handleInputChange}
+              className="mr-2"
+            />
+            <span className="text-sm text-blue-300">Dynamically create routes for incident areas not covered by existing routes</span>
+          </label>
+        </div>
+
         <div className="flex gap-4 mt-6">
           <button
             onClick={validateParams}
@@ -424,6 +457,12 @@ const AISchedulerPage = () => {
                 <span className="text-blue-400">Total Officers:</span>
                 <span className="text-blue-200 ml-2">{generatedAssignments.summary.totalOfficers}</span>
               </div>
+              {generatedAssignments.summary.routesCreated > 0 && (
+                <div>
+                  <span className="text-blue-400">Routes Created:</span>
+                  <span className="text-blue-200 ml-2">{generatedAssignments.summary.routesCreated}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -463,6 +502,33 @@ const AISchedulerPage = () => {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Newly Created Routes */}
+          {generatedAssignments.newlyCreatedRoutes && generatedAssignments.newlyCreatedRoutes.length > 0 && (
+            <div className="mt-6 p-4 bg-green-900/20 border border-green-500/30 rounded-md">
+              <h3 className="font-medium text-green-300 mb-3">Newly Created Routes</h3>
+              <div className="space-y-3">
+                {generatedAssignments.newlyCreatedRoutes.map((routeInfo, index) => (
+                  <div key={index} className="p-3 bg-green-900/10 border border-green-500/20 rounded-md">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-medium text-green-300">{routeInfo.route.name}</h4>
+                        <p className="text-sm text-green-400">{routeInfo.route.description}</p>
+                        <p className="text-xs text-green-500 mt-1">Reason: {routeInfo.reason}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-green-400">Incident: {routeInfo.incident.title}</div>
+                        <div className="text-xs text-green-500">{routeInfo.incident.severity} severity</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
           </div>
         </div>
       )}

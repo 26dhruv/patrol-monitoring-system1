@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { incidentService, locationService, userService } from '../services/api';
+import { incidentService, userService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
@@ -17,13 +17,17 @@ const IncidentFormPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   
-  const [locations, setLocations] = useState([]);
   const [officers, setOfficers] = useState([]);
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    location: '',
+    area: '',
+    locationName: '',
+    coordinates: {
+      latitude: '',
+      longitude: ''
+    },
     date: new Date().toISOString().split('T')[0], // Current date in YYYY-MM-DD format
     time: new Date().toTimeString().slice(0, 5), // Current time in HH:MM format
     severity: 'medium',
@@ -41,14 +45,46 @@ const IncidentFormPage = () => {
     assignedTo: [],
   });
   
+  // Search suggestions state
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState(null);
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
+  
+  // Common Ahmedabad places for fallback
+  const commonAhmedabadPlaces = [
+    { name: 'Ahmedabad Railway Station', lat: 23.0272644, lon: 72.6015853 },
+    { name: 'Sabarmati Ashram', lat: 23.0601651, lon: 72.5806382 },
+    { name: 'Law Garden', lat: 23.0225, lon: 72.5714 },
+    { name: 'Satellite Road', lat: 23.0279564, lon: 72.5189752 },
+    { name: 'Mansi Circle', lat: 23.0328215, lon: 72.5253767 },
+    { name: 'ISRO Satellite Center', lat: 23.0330, lon: 72.5850 },
+    { name: 'Gujarat High Court', lat: 23.0225, lon: 72.5714 },
+    { name: 'Navrangpura', lat: 23.0225, lon: 72.5714 },
+    { name: 'Vastrapur', lat: 23.0325, lon: 72.5250 },
+    { name: 'Bodakdev', lat: 23.0225, lon: 72.5714 },
+    { name: 'Paldi', lat: 23.0225, lon: 72.5714 },
+    { name: 'Ellis Bridge', lat: 23.0225, lon: 72.5714 },
+    { name: 'CG Road', lat: 23.0225, lon: 72.5714 },
+    { name: 'SG Road', lat: 23.0225, lon: 72.5714 },
+    { name: 'Satellite', lat: 23.0279564, lon: 72.5189752 },
+    { name: 'Jodhpur', lat: 23.0244106, lon: 72.5302711 },
+    { name: 'Ambawadi', lat: 23.0230941, lon: 72.5364734 },
+    { name: 'Panjrapole', lat: 23.0241524, lon: 72.5324576 },
+    { name: 'Ramdev Nagar', lat: 23.0279564, lon: 72.5189752 },
+    { name: 'Vejalpur', lat: 23.0325, lon: 72.5250 },
+    { name: 'Sabarmati', lat: 23.0601651, lon: 72.5806382 },
+    { name: 'Maninagar', lat: 23.0272644, lon: 72.6015853 },
+    { name: 'Revdi Bazar', lat: 23.0272644, lon: 72.6015853 },
+    { name: 'Ashram Road', lat: 23.0601651, lon: 72.5806382 },
+    { name: 'Judges Bunglow Road', lat: 23.0328215, lon: 72.5253767 }
+  ];
+  
   // Fetch locations and officers on component mount
   useEffect(() => {
     const fetchFormData = async () => {
       try {
-        // Fetch locations
-        const locationsResponse = await locationService.getAllLocations();
-        setLocations(locationsResponse.data.data);
-        
         // Fetch officers
         const officersResponse = await userService.getOfficers();
         setOfficers(officersResponse.data.data);
@@ -66,7 +102,12 @@ const IncidentFormPage = () => {
           setFormData({
             title: incident.title || '',
             description: incident.description || '',
-            location: incident.location?._id || '',
+            area: incident.area || '',
+            locationName: incident.area || '',
+            coordinates: {
+              latitude: incident.coordinates?.latitude || '',
+              longitude: incident.coordinates?.longitude || ''
+            },
             date: formattedDate,
             time: incident.time || '',
             severity: incident.severity || 'medium',
@@ -101,6 +142,165 @@ const IncidentFormPage = () => {
       ...prev,
       [name]: value
     }));
+  };
+  
+  // Search for places using Nominatim (OpenStreetMap)
+  const searchPlaces = async (query) => {
+    if (!query.trim() || query.length < 2) {
+      setLocationSuggestions([]);
+      return;
+    }
+    
+    // Don't search if already searching the same query
+    if (lastSearchQuery === query.trim()) {
+      return;
+    }
+    
+    // Don't search if already searching
+    if (isSearching) {
+      return;
+    }
+    
+    try {
+      setIsSearching(true);
+      setLastSearchQuery(query.trim());
+      
+      // Try multiple search variations to find more places
+      const searchVariations = [
+        `${query}, Ahmedabad, Gujarat, India`,
+        `${query} Ahmedabad`,
+        `${query}, Gujarat, India`,
+        `${query}`
+      ];
+      
+      let allResults = [];
+      
+      // Search with each variation
+      for (const searchQuery of searchVariations) {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?` +
+            `q=${encodeURIComponent(searchQuery)}&` +
+            `format=json&` +
+            `limit=5&` +
+            `addressdetails=1&` +
+            `countrycodes=in&` +
+            `bounded=1&` +
+            `viewbox=72.4,22.9,72.8,23.2&` +
+            `user-agent=patrol-monitoring-system`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            allResults = [...allResults, ...data];
+          }
+        } catch (error) {
+          console.error(`Error with search variation "${searchQuery}":`, error);
+        }
+      }
+      
+      // Remove duplicates and filter for Ahmedabad area
+      const uniqueResults = allResults.filter((place, index, self) => 
+        index === self.findIndex(p => p.place_id === place.place_id)
+      );
+      
+      const ahmedabadResults = uniqueResults.filter(place => {
+        const address = place.address || {};
+        const displayName = place.display_name.toLowerCase();
+        
+        return (
+          address.city === 'Ahmedabad' ||
+          address.state_district === 'Ahmedabad' ||
+          address.county === 'Ahmedabad' ||
+          displayName.includes('ahmedabad') ||
+          displayName.includes('gujarat') ||
+          // Include places that might not have explicit Ahmedabad in address but are in the area
+          (place.lat >= 22.9 && place.lat <= 23.2 && place.lon >= 72.4 && place.lon <= 72.8)
+        );
+      });
+      
+      // Sort by relevance (places with Ahmedabad in name first)
+      const sortedResults = ahmedabadResults.sort((a, b) => {
+        const aHasAhmedabad = a.display_name.toLowerCase().includes('ahmedabad');
+        const bHasAhmedabad = b.display_name.toLowerCase().includes('ahmedabad');
+        
+        if (aHasAhmedabad && !bHasAhmedabad) return -1;
+        if (!aHasAhmedabad && bHasAhmedabad) return 1;
+        return 0;
+      });
+      
+      // If no results found, provide common Ahmedabad places
+      if (sortedResults.length === 0) {
+        const matchingCommonPlaces = commonAhmedabadPlaces.filter(place =>
+          place.name.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        if (matchingCommonPlaces.length > 0) {
+          const fallbackResults = matchingCommonPlaces.map(place => ({
+            place_id: `fallback_${place.name}`,
+            display_name: place.name,
+            lat: place.lat.toString(),
+            lon: place.lon.toString(),
+            type: 'fallback',
+            address: { city: 'Ahmedabad', state: 'Gujarat', country: 'India' }
+          }));
+          setLocationSuggestions(fallbackResults);
+          return;
+        }
+      }
+      
+      setLocationSuggestions(sortedResults.slice(0, 8));
+    } catch (error) {
+      console.error('Error searching places:', error);
+      setLocationSuggestions([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+  
+  // Handle location input change with debouncing
+  const handleLocationInputChange = (value) => {
+    setFormData(prev => ({ ...prev, locationName: value }));
+    
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Don't search for very short queries
+    if (value.trim().length < 2) {
+      setLocationSuggestions([]);
+      setShowLocationSuggestions(false);
+      return;
+    }
+    
+    // Set new timeout for search
+    const timeout = setTimeout(() => {
+      searchPlaces(value);
+      setShowLocationSuggestions(true);
+    }, 800);
+    
+    setSearchTimeout(timeout);
+  };
+  
+  // Handle suggestion selection
+  const handleSuggestionSelect = (suggestion) => {
+    const locationName = suggestion.display_name.split(',')[0]; // Get first part of address
+    const coordinates = {
+      latitude: parseFloat(suggestion.lat),
+      longitude: parseFloat(suggestion.lon)
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      locationName: locationName,
+      coordinates: coordinates,
+      area: locationName // Use location name as area
+    }));
+    
+    // Hide suggestions
+    setShowLocationSuggestions(false);
+    setLocationSuggestions([]);
   };
   
   const handleMultiSelectChange = (e) => {
@@ -206,11 +406,8 @@ const IncidentFormPage = () => {
       if (!formData.description.trim()) {
         throw new Error('Description is required');
       }
-      if (!formData.location) {
-        throw new Error('Location is required');
-      }
-      if (!formData.category) {
-        throw new Error('Category is required');
+      if (!formData.area.trim()) {
+        throw new Error('Area is required. Please geocode a location name or enter area manually.');
       }
 
       // Filter out empty witnesses and involved persons
@@ -228,7 +425,12 @@ const IncidentFormPage = () => {
         ...formData,
         date: formattedDate,
         witnesses: filteredWitnesses,
-        involvedPersons: filteredInvolvedPersons
+        involvedPersons: filteredInvolvedPersons,
+        // Convert coordinates to numbers if they exist
+        coordinates: formData.coordinates.latitude && formData.coordinates.longitude ? {
+          latitude: parseFloat(formData.coordinates.latitude),
+          longitude: parseFloat(formData.coordinates.longitude)
+        } : undefined
       };
       
       console.log('Submitting incident data:', incidentData);
@@ -358,22 +560,52 @@ const IncidentFormPage = () => {
               </div>
               
               <div>
-                <label htmlFor="location" className="block text-sm font-medium text-blue-300 mb-1">Location</label>
-                <select
-                  id="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  <option value="">Select Location</option>
-                  {locations.map(location => (
-                    <option key={location._id} value={location._id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
+                <label htmlFor="locationName" className="block text-sm font-medium text-blue-300 mb-1">Location</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="locationName"
+                    name="locationName"
+                    value={formData.locationName}
+                    onChange={(e) => handleLocationInputChange(e.target.value)}
+                    onFocus={() => setShowLocationSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 200)}
+                    className="w-full px-3 py-2 border border-blue-900/30 rounded-md shadow-sm placeholder-blue-400/50 text-blue-100 bg-[#071425]/50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Try: Railway Station, Satellite, Mansi, ISRO, CG Road..."
+                  />
+                  {formData.coordinates.latitude && formData.coordinates.longitude && (
+                    <p className="text-xs text-green-400 mt-1">
+                      ✓ Coordinates: {formData.coordinates.latitude}, {formData.coordinates.longitude}
+                    </p>
+                  )}
+                  {isSearching && formData.locationName && formData.locationName.length >= 2 && (
+                    <p className="text-xs text-blue-400 mt-1">
+                      🔍 Searching...
+                    </p>
+                  )}
+                  
+                  {/* Location Suggestions */}
+                  {showLocationSuggestions && locationSuggestions.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-[#071425] border border-blue-900/30 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {locationSuggestions.map((suggestion, index) => (
+                        <div
+                          key={index}
+                          className="px-3 py-2 hover:bg-blue-900/30 cursor-pointer text-blue-300 text-sm"
+                          onClick={() => handleSuggestionSelect(suggestion)}
+                        >
+                          <div className="font-medium">{suggestion.display_name.split(',')[0]}</div>
+                          <div className="text-blue-400 text-xs">
+                            {suggestion.type === 'fallback' ? 
+                              '📍 Common Ahmedabad location' : 
+                              suggestion.display_name
+                            }
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-blue-400 mt-1">Enter a location name to search for places in Ahmedabad</p>
               </div>
             </div>
             

@@ -128,13 +128,13 @@ exports.downloadReport = async (req, res, next) => {
     switch (type) {
       case 'patrol':
         reportData = await getPatrolReports(startDateTime, endDateTime, req.user);
-        fields = ['_id', 'location.name', 'startTime', 'endTime', 'status', 'assignedOfficers'];
+        fields = ['_id', 'patrolRoute.name', 'startTime', 'endTime', 'status', 'assignedOfficers'];
         filename = 'patrol-report.csv';
         // Transform assignedOfficers from array to string for CSV
         reportData = reportData.map(patrol => ({
           ...patrol,
           assignedOfficers: patrol.assignedOfficers?.map(officer => officer.name).join(', ') || 'Unassigned',
-          'location.name': patrol.location?.name || 'N/A'
+          'patrolRoute.name': patrol.patrolRoute?.name || 'N/A'
         }));
         break;
       case 'incident':
@@ -186,7 +186,7 @@ async function getPatrolReports(startDate, endDate, user) {
   }
   
   const patrols = await Patrol.find(query)
-    .populate('location', 'name')
+    .populate('patrolRoute', 'name checkpoints')
     .populate('assignedOfficers', 'name')
     .sort({ startTime: -1 });
   

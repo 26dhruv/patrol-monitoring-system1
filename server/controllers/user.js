@@ -153,14 +153,6 @@ exports.deleteUser = async (req, res, next) => {
 // @access  Private (Admin, Manager)
 exports.getOfficers = async (req, res, next) => {
   try {
-    // Check authorization
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
-      return res.status(401).json({
-        success: false,
-        error: 'Not authorized to access officer list'
-      });
-    }
-
     const officers = await User.find({ role: 'officer' }).select('-password');
 
     res.status(200).json({

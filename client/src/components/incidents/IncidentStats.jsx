@@ -64,7 +64,7 @@ const IncidentStats = () => {
         return 'bg-blue-900/20 border-blue-500/30 text-blue-300';
     }
   };
-
+  
   const getStatusColorClass = (status) => {
     switch (status) {
       case 'new':
@@ -79,7 +79,7 @@ const IncidentStats = () => {
         return 'bg-blue-900/20 border-blue-500/30 text-blue-300';
     }
   };
-
+  
   // Determine the title based on user role
   const getTitle = () => {
     if (stats.userRole === 'officer') {
@@ -112,14 +112,14 @@ const IncidentStats = () => {
       return 'Recent Incidents';
     }
   };
-
+  
   return (
     <div className="card-glass border border-blue-900/30 rounded-lg p-6 w-full">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500">
           {getTitle()}
         </h2>
-        <Link
+        <Link 
           to="/incidents"
           className="btn-sm-outline"
         >
@@ -236,7 +236,7 @@ const IncidentStats = () => {
                       <div className="w-32 text-sm capitalize text-blue-300">{severity}</div>
                       <div className="flex-1 bg-blue-900/20 rounded-full h-2.5 mr-2">
                         <div 
-                          className={`bg-gradient-to-r ${gradientClass} h-2.5 rounded-full`}
+                          className={`bg-gradient-to-r ${gradientClass} h-2.5 rounded-full`} 
                           style={{ width: `${(count / stats.total) * 100}%` }}
                         ></div>
                       </div>

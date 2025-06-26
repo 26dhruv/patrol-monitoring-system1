@@ -12,7 +12,8 @@ exports.generatePatrolAssignments = async (req, res, next) => {
       endTime,
       availableOfficers = [],
       maxRoutes = 5,
-      autoCreate = false
+      autoCreate = false,
+      createMissingRoutes = false
     } = req.body;
 
     // Validate inputs
@@ -32,7 +33,8 @@ exports.generatePatrolAssignments = async (req, res, next) => {
       startTime: startDate,
       endTime: endDate,
       availableOfficers,
-      maxRoutes
+      maxRoutes,
+      createMissingRoutes
     });
 
     // If autoCreate is true, create the patrols in the database
@@ -141,7 +143,7 @@ exports.getSchedulingStats = async (req, res, next) => {
     // Get incident statistics
     const Incident = require('../models/Incident');
     const totalIncidents = await Incident.countDocuments();
-    const openIncidents = await Incident.countDocuments({ status: { $in: ['open', 'in-progress'] } });
+    const openIncidents = await Incident.countDocuments({ status: { $in: ['reported', 'investigating'] } });
 
     const stats = {
       patrols: {
