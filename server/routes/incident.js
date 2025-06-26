@@ -23,7 +23,7 @@ router.get('/stats', (req, res) => {
   // Pass user information as query parameters
   if (req.user) {
     req.query.userRole = req.user.role;
-    req.query.userId = req.user.id || req.user._id;
+    req.query.userId = req.user.userId;
   }
   
   // Call the controller function
