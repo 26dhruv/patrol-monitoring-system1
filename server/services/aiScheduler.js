@@ -193,6 +193,20 @@ class AIScheduler {
       const workloadData = [];
 
       for (const officer of officers) {
+        // Get all patrols for this officer that overlap with the requested time period
+        const overlappingPatrols = await Patrol.find({
+          assignedOfficers: officer._id,
+          status: { $in: ['scheduled', 'in-progress'] },
+          $or: [
+            // Patrol starts during the requested period
+            { startTime: { $gte: startTime, $lt: endTime } },
+            // Patrol ends during the requested period
+            { endTime: { $gt: startTime, $lte: endTime } },
+            // Patrol completely encompasses the requested period
+            { startTime: { $lte: startTime }, endTime: { $gte: endTime } }
+          ]
+        }).populate('patrolRoute', 'name');
+
         // Count active patrols for this officer
         const activePatrols = await Patrol.countDocuments({
           assignedOfficers: officer._id,
@@ -209,12 +223,18 @@ class AIScheduler {
           createdAt: { $gte: sevenDaysAgo }
         });
 
+        // Calculate available time slots
+        const availableTimeSlots = this.calculateAvailableTimeSlots(startTime, endTime, overlappingPatrols);
+
         workloadData.push({
           officer,
           activePatrols,
           recentPatrols,
+          overlappingPatrols,
+          availableTimeSlots,
           workloadScore: activePatrols * 2 + recentPatrols * 0.1,
-          availability: officer.status === 'active' ? 1 : 0.5
+          availability: officer.status === 'active' ? 1 : 0.5,
+          isAvailable: availableTimeSlots.length > 0
         });
       }
 
@@ -225,10 +245,54 @@ class AIScheduler {
         officer,
         activePatrols: 0,
         recentPatrols: 0,
+        overlappingPatrols: [],
+        availableTimeSlots: [{ start: startTime, end: endTime }],
         workloadScore: 0,
-        availability: 1
+        availability: 1,
+        isAvailable: true
       }));
     }
+  }
+
+  /**
+   * Calculate available time slots for an officer
+   */
+  calculateAvailableTimeSlots(startTime, endTime, overlappingPatrols) {
+    if (overlappingPatrols.length === 0) {
+      return [{ start: startTime, end: endTime }];
+    }
+
+    const timeSlots = [];
+    let currentTime = new Date(startTime);
+
+    // Sort patrols by start time
+    const sortedPatrols = overlappingPatrols.sort((a, b) => a.startTime - b.startTime);
+
+    for (const patrol of sortedPatrols) {
+      // If there's a gap before this patrol, add it as available
+      if (currentTime < patrol.startTime) {
+        timeSlots.push({
+          start: new Date(currentTime),
+          end: new Date(patrol.startTime)
+        });
+      }
+      // Move current time to the end of this patrol
+      currentTime = new Date(Math.max(currentTime.getTime(), patrol.endTime.getTime()));
+    }
+
+    // If there's time remaining after the last patrol, add it
+    if (currentTime < endTime) {
+      timeSlots.push({
+        start: new Date(currentTime),
+        end: new Date(endTime)
+      });
+    }
+
+    // Filter out slots that are too short (less than 30 minutes)
+    return timeSlots.filter(slot => {
+      const duration = slot.end.getTime() - slot.start.getTime();
+      return duration >= 30 * 60 * 1000; // 30 minutes in milliseconds
+    });
   }
 
   /**
@@ -238,7 +302,7 @@ class AIScheduler {
     const {
       startTime = new Date(),
       endTime = new Date(startTime.getTime() + 8 * 60 * 60 * 1000), // 8 hours
-      availableOfficers = [],
+      availableOfficers: providedOfficers = [],
       maxRoutes = 5,
       includeIncidentAreas = true,
       createMissingRoutes = false
@@ -256,7 +320,7 @@ class AIScheduler {
       });
 
       // Get available officers if not provided
-      let officers = availableOfficers;
+      let officers = providedOfficers;
       if (officers.length === 0) {
         officers = await User.find({
           role: 'officer',
@@ -438,23 +502,82 @@ class AIScheduler {
       // Get officer workload data
       const officerWorkload = await this.getOfficerWorkload(officers, startTime, endTime);
 
-      // Assign routes to officers using round-robin if there are more routes than officers
+      // Filter officers who have available time slots
+      const availableOfficersData = officerWorkload.filter(officer => officer.isAvailable);
+
+      if (availableOfficersData.length === 0) {
+        throw new Error('No officers available for the requested time period. All officers have conflicting patrols.');
+      }
+
+      // Assign routes to officers using available time slots
       const assignments = [];
-      let officerIndex = 0;
       const totalRoutesToAssign = Math.min(routeScores.length, maxRoutes);
+      
       for (let i = 0; i < totalRoutesToAssign; i++) {
         const routeScore = routeScores[i];
-        const officer = officerWorkload[officerIndex % officerWorkload.length].officer;
-        assignments.push({
-          route: routeScore.route,
-          officer,
-          score: routeScore.score,
-          incidentPriority: routeScore.incidentPriority,
-          efficiency: routeScore.efficiency,
-          startTime,
-          endTime
-        });
-        officerIndex++;
+        
+        // Find the best available officer for this route
+        let bestOfficer = null;
+        let bestTimeSlot = null;
+        let bestScore = -1;
+
+        for (const officerData of availableOfficersData) {
+          // Check if this officer has any available time slots
+          for (const timeSlot of officerData.availableTimeSlots) {
+            // Calculate if this route can fit in the time slot
+            const routeDuration = routeScore.efficiency.estimatedDuration || 60;
+            const slotDuration = timeSlot.end.getTime() - timeSlot.start.getTime();
+            
+            if (slotDuration >= routeDuration * 60 * 1000) { // Convert minutes to milliseconds
+              // Calculate assignment score based on officer workload and route priority
+              const assignmentScore = routeScore.score * (1 - officerData.workloadScore * 0.1);
+              
+              if (assignmentScore > bestScore) {
+                bestScore = assignmentScore;
+                bestOfficer = officerData.officer;
+                bestTimeSlot = timeSlot;
+              }
+            }
+          }
+        }
+
+        if (bestOfficer && bestTimeSlot) {
+          // Calculate actual start and end times for this assignment
+          const routeDuration = routeScore.efficiency.estimatedDuration || 60;
+          const assignmentStartTime = new Date(bestTimeSlot.start);
+          const assignmentEndTime = new Date(bestTimeSlot.start.getTime() + routeDuration * 60 * 1000);
+
+          assignments.push({
+            route: routeScore.route,
+            officer: bestOfficer,
+            score: bestScore,
+            incidentPriority: routeScore.incidentPriority,
+            efficiency: routeScore.efficiency,
+            startTime: assignmentStartTime,
+            endTime: assignmentEndTime,
+            timeSlot: bestTimeSlot
+          });
+
+          // Update the officer's available time slots by removing the used time
+          const officerData = availableOfficersData.find(o => o.officer._id.toString() === bestOfficer._id.toString());
+          if (officerData) {
+            // Remove the used time slot and add remaining time if any
+            const remainingTime = bestTimeSlot.end.getTime() - assignmentEndTime.getTime();
+            if (remainingTime >= 30 * 60 * 1000) { // At least 30 minutes remaining
+              officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
+              officerData.availableTimeSlots.push({
+                start: assignmentEndTime,
+                end: bestTimeSlot.end
+              });
+            } else {
+              // Remove the entire time slot if not enough time remaining
+              officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
+            }
+            
+            // Check if officer still has available time
+            officerData.isAvailable = officerData.availableTimeSlots.length > 0;
+          }
+        }
       }
 
       return {

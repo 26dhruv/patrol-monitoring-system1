@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const errorHandlerMiddleware = require('./middleware/error-handler');
+const PatrolStatusManager = require('./services/patrolStatusManager');
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +13,9 @@ dotenv.config();
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Initialize patrol status manager
+const patrolStatusManager = new PatrolStatusManager();
 
 // Middleware
 app.use(express.json());
@@ -60,6 +64,9 @@ mongoose
     app.listen(PORT, () => {
       console.log(`Server running on port: ${PORT}`);
       console.log('MongoDB Connected');
+      
+      // Start the patrol status scheduler
+      patrolStatusManager.startStatusScheduler();
     });
   })
   .catch((error) => console.log(`${error} did not connect`)); 

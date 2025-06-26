@@ -59,7 +59,7 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
       try {
         setLoading(true);
         const response = await patrolService.getPatrol(id);
-        const patrolData = response.data.data;
+        const { patrol: patrolData } = response.data.data;
         
         // Format dates for form inputs
         const formattedData = {
@@ -76,7 +76,10 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
         
         // Set selected route if patrol has a route
         if (patrolData.patrolRoute) {
+          const routeId = patrolData.patrolRoute._id || patrolData.patrolRoute;
+          setFormData(prev => ({ ...prev, patrolRoute: routeId }));
           setSelectedRoute(patrolData.patrolRoute);
+          console.log('Setting patrol route:', routeId, patrolData.patrolRoute);
         }
         
       } catch (err) {
@@ -132,6 +135,17 @@ const AssignPatrolPage = ({ assignOfficersOnly = false, checkpointsOnly = false 
     
     fetchPatrolRoutes();
   }, []);
+  
+  // Update selectedRoute when patrolRoutes are loaded and we have a patrolRoute in formData
+  useEffect(() => {
+    if (patrolRoutes.length > 0 && formData.patrolRoute && !selectedRoute) {
+      const route = patrolRoutes.find(r => r._id === formData.patrolRoute);
+      if (route) {
+        setSelectedRoute(route);
+        console.log('Found and set selected route:', route);
+      }
+    }
+  }, [patrolRoutes, formData.patrolRoute, selectedRoute]);
   
   // Handle form input changes
   const handleInputChange = (e) => {

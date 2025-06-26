@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const Incident = require('../models/Incident');
 const User = require('../models/User');
 
-const MONGO_URI = process.env.MONGO_URI;
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {

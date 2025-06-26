@@ -2,7 +2,11 @@ const Patrol = require('../models/Patrol');
 const PatrolLog = require('../models/PatrolLog');
 const User = require('../models/User');
 const PatrolRoute = require('../models/PatrolRoute');
+const PatrolStatusManager = require('../services/patrolStatusManager');
 const mongoose = require('mongoose');
+
+// Initialize patrol status manager
+const patrolStatusManager = new PatrolStatusManager();
 
 // @desc    Create a new patrol
 // @route   POST /api/patrol
@@ -29,6 +33,31 @@ exports.createPatrol = async (req, res, next) => {
         status: 'pending',
         order: checkpoint.order
       }));
+    }
+
+    // Check for time conflicts if assigned officers and times are provided
+    if (req.body.assignedOfficers && req.body.startTime && req.body.endTime) {
+      const conflicts = await patrolStatusManager.checkTimeConflicts(
+        req.body.assignedOfficers,
+        new Date(req.body.startTime),
+        new Date(req.body.endTime)
+      );
+
+      if (conflicts.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Time conflicts detected with existing patrols',
+          conflicts: conflicts.map(conflict => ({
+            officerName: conflict.officerName,
+            overlappingPatrols: conflict.overlappingPatrols.map(p => ({
+              title: p.title,
+              startTime: p.startTime,
+              endTime: p.endTime,
+              routeName: p.routeName
+            }))
+          }))
+        });
+      }
     }
 
     const patrol = await Patrol.create(req.body);
@@ -233,12 +262,44 @@ exports.updatePatrol = async (req, res, next) => {
       });
     }
 
-    // Make sure user is patrol creator or an admin
-    if (patrol.assignedBy.toString() !== req.user.userId && req.user.role !== 'admin') {
+    // Make sure user is patrol creator, admin, or manager
+    if (patrol.assignedBy && patrol.assignedBy.toString() !== req.user.userId && req.user.role !== 'admin' && req.user.role !== 'manager') {
       return res.status(401).json({
         success: false,
         error: `User ${req.user.userId} is not authorized to update this patrol`
       });
+    }
+
+    // Check for time conflicts if updating times or assigned officers
+    if ((req.body.startTime || req.body.endTime || req.body.assignedOfficers) && 
+        patrol.status === 'scheduled') {
+      
+      const startTime = req.body.startTime ? new Date(req.body.startTime) : patrol.startTime;
+      const endTime = req.body.endTime ? new Date(req.body.endTime) : patrol.endTime;
+      const assignedOfficers = req.body.assignedOfficers || patrol.assignedOfficers;
+
+      const conflicts = await patrolStatusManager.checkTimeConflicts(
+        assignedOfficers,
+        startTime,
+        endTime,
+        req.params.id // Exclude current patrol
+      );
+
+      if (conflicts.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Time conflicts detected with existing patrols',
+          conflicts: conflicts.map(conflict => ({
+            officerName: conflict.officerName,
+            overlappingPatrols: conflict.overlappingPatrols.map(p => ({
+              title: p.title,
+              startTime: p.startTime,
+              endTime: p.endTime,
+              routeName: p.routeName
+            }))
+          }))
+        });
+      }
     }
 
     patrol = await Patrol.findByIdAndUpdate(req.params.id, req.body, {
@@ -264,31 +325,51 @@ exports.updatePatrol = async (req, res, next) => {
 // @access  Private (Admin, Manager)
 exports.deletePatrol = async (req, res, next) => {
   try {
+    console.log('Delete patrol request for ID:', req.params.id);
+    console.log('User ID:', req.user.userId, 'Role:', req.user.role);
+    
     const patrol = await Patrol.findById(req.params.id);
 
     if (!patrol) {
+      console.log('Patrol not found');
       return res.status(404).json({
         success: false,
         error: `Patrol not found with id of ${req.params.id}`
       });
     }
 
-    // Make sure user is patrol creator or an admin
-    if (patrol.assignedBy.toString() !== req.user.userId && req.user.role !== 'admin') {
+    console.log('Found patrol:', {
+      id: patrol._id,
+      assignedBy: patrol.assignedBy,
+      title: patrol.title
+    });
+
+    // Make sure user is patrol creator, admin, or manager
+    if (patrol.assignedBy && patrol.assignedBy.toString() !== req.user.userId && req.user.role !== 'admin' && req.user.role !== 'manager') {
+      console.log('Authorization failed');
       return res.status(401).json({
         success: false,
         error: `User ${req.user.userId} is not authorized to delete this patrol`
       });
     }
 
-    await patrol.remove();
+    console.log('Authorization passed, deleting patrol...');
+
+    await Patrol.deleteOne({ _id: req.params.id });
+
+    // Delete associated patrol logs
+    console.log('Deleting associated patrol logs...');
+    await PatrolLog.deleteMany({ patrol: req.params.id });
+
+    console.log('Patrol and logs deleted successfully');
 
     res.status(200).json({
       success: true,
       data: {}
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error in deletePatrol:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Server Error'
@@ -730,5 +811,73 @@ exports.trackPatrolLocation = async (req, res, next) => {
   } catch (error) {
     console.error('Error tracking patrol location:', error);
     res.status(500).json({ success: false, error: 'Server error.' });
+  }
+};
+
+// @desc    Update patrol status
+// @route   PATCH /api/patrol/:id/status
+// @access  Private
+exports.updatePatrolStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status is required'
+      });
+    }
+
+    const patrol = await Patrol.findById(req.params.id);
+
+    if (!patrol) {
+      return res.status(404).json({
+        success: false,
+        error: `Patrol not found with id of ${req.params.id}`
+      });
+    }
+
+    // Check if user is authorized to update this patrol
+    const isAssignedOfficer = patrol.assignedOfficers.includes(req.user.userId);
+    const isCreator = patrol.assignedBy && patrol.assignedBy.toString() === req.user.userId;
+    const isAdmin = req.user.role === 'admin';
+    const isManager = req.user.role === 'manager';
+
+    if (!isAssignedOfficer && !isCreator && !isAdmin && !isManager) {
+      return res.status(401).json({
+        success: false,
+        error: 'You are not authorized to update this patrol'
+      });
+    }
+
+    // Validate status transition
+    const validStatuses = ['scheduled', 'in-progress', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be one of: scheduled, in-progress, completed, cancelled'
+      });
+    }
+
+    // Update the patrol status
+    patrol.status = status;
+    
+    // Set end time if completing the patrol
+    if (status === 'completed' && !patrol.endTime) {
+      patrol.endTime = new Date();
+    }
+
+    await patrol.save();
+
+    res.status(200).json({
+      success: true,
+      data: patrol
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
   }
 }; 

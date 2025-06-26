@@ -139,6 +139,7 @@ export const patrolService = {
   getPatrol: (id) => api.get(`/patrol/${id}`),
   createPatrol: (patrolData) => api.post('/patrol', patrolData),
   updatePatrol: (id, patrolData) => api.put(`/patrol/${id}`, patrolData),
+  updatePatrolStatus: (id, status) => api.patch(`/patrol/${id}/status`, { status }),
   deletePatrol: (id) => api.delete(`/patrol/${id}`),
   startPatrol: (id, coordinates) => api.put(`/patrol/${id}/start`, { coordinates }),
   createPatrolLog: (patrolId, logData) => api.post(`/patrol/${patrolId}/logs`, logData),
@@ -177,6 +178,19 @@ export const patrolService = {
         throw new Error(`Failed to fetch officer patrols: ${error.message}`);
       });
   },
+  // New availability checking methods
+  checkAvailability: (startTime, endTime) => api.get('/patrol/availability/check', {
+    params: { startTime, endTime }
+  }),
+  checkOfficerAvailability: (officerId, startTime, endTime) => api.get(`/patrol/availability/officer/${officerId}`, {
+    params: { startTime, endTime }
+  }),
+  checkTimeConflicts: (officerIds, startTime, endTime, excludePatrolId = null) => api.post('/patrol/conflicts/check', {
+    officerIds,
+    startTime,
+    endTime,
+    excludePatrolId
+  })
 };
 
 // Location services
