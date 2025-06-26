@@ -263,99 +263,75 @@ class AIScheduler {
         for (const incident of openIncidents) {
           // Check if incident has coordinates
           if (incident.coordinates?.latitude && incident.coordinates?.longitude) {
-            // Check if any existing route already covers this incident area
-            const existingRouteCoversIncident = patrolRoutes.some(route =>
-              route.checkpoints.some(cp => {
-                // Check if checkpoint name matches incident area
-                if (cp.name.trim().toLowerCase() === incident.area?.trim().toLowerCase()) {
-                  return true;
+            // Always create a new route for each incident (ignore existing routes)
+            const newRoute = await PatrolRoute.create({
+              name: `Incident Response: ${incident.area || 'Unknown Area'}`,
+              description: `Auto-generated route for incident at ${incident.area || 'Unknown Area'}`,
+              checkpoints: [
+                {
+                  name: incident.area || 'Incident Location',
+                  description: `Incident location: ${incident.title}`,
+                  coordinates: {
+                    latitude: incident.coordinates.latitude,
+                    longitude: incident.coordinates.longitude
+                  },
+                  geofenceRadius: 100, // Larger radius for incident areas
+                  estimatedTime: 15,
+                  order: 1,
+                  requirements: {
+                    scanQrCode: false,
+                    takePhoto: true,
+                    writeReport: true,
+                    signature: false
+                  },
+                  isActive: true
                 }
-                // Check if checkpoint is very close to incident coordinates (within 500m)
-                const distance = this.calculateDistance(
-                  incident.coordinates.latitude,
-                  incident.coordinates.longitude,
-                  cp.coordinates.latitude,
-                  cp.coordinates.longitude
-                );
-                return distance <= 0.5; // 500 meters
-              })
-            );
-
-            // If no existing route covers this incident, create a new route
-            if (!existingRouteCoversIncident) {
-              const newRoute = await PatrolRoute.create({
-                name: `Incident Response: ${incident.area || 'Unknown Area'}`,
-                description: `Auto-generated route for incident at ${incident.area || 'Unknown Area'}`,
-                checkpoints: [
-                  {
-                    name: incident.area || 'Incident Location',
-                    description: `Incident location: ${incident.title}`,
-                    coordinates: {
-                      latitude: incident.coordinates.latitude,
-                      longitude: incident.coordinates.longitude
-                    },
-                    geofenceRadius: 100, // Larger radius for incident areas
-                    estimatedTime: 15,
-                    order: 1,
-                    requirements: {
-                      scanQrCode: false,
-                      takePhoto: true,
-                      writeReport: true,
-                      signature: false
-                    },
-                    isActive: true
-                  }
-                ],
-                totalDistance: 0,
-                estimatedDuration: 15,
-                difficulty: 'medium',
-                securityLevel: 'high',
-                isActive: true,
-                createdBy: officers[0]._id,
-                notes: `Auto-created for incident: ${incident.title} (${incident.severity} severity)`
-              });
-              patrolRoutes.push(newRoute);
-              newlyCreatedRoutes.push({
-                route: newRoute,
-                incident: incident,
-                reason: 'Created new route for incident area'
-              });
-            }
+              ],
+              totalDistance: 0,
+              estimatedDuration: 15,
+              difficulty: 'medium',
+              securityLevel: 'high',
+              isActive: true,
+              createdBy: officers[0]._id,
+              notes: `Auto-created for incident: ${incident.title} (${incident.severity} severity)`
+            });
+            patrolRoutes.push(newRoute);
+            newlyCreatedRoutes.push({
+              route: newRoute,
+              incident: incident,
+              reason: 'Created new route for incident area'
+            });
           } else {
             // Fallback to area-based matching for incidents without coordinates
             const area = incident.area?.trim().toLowerCase();
             if (!area) continue;
-            const routeCoversArea = patrolRoutes.some(route =>
-              route.checkpoints.some(cp => cp.name.trim().toLowerCase() === area)
-            );
-            if (!routeCoversArea) {
-              // Create a new route for this area
-              const newRoute = await PatrolRoute.create({
-                name: `Incident Response: ${incident.area}`,
-                description: `Auto-generated route for incident at ${incident.area}`,
-                checkpoints: [
-                  {
-                    name: incident.area,
-                    description: `Incident location: ${incident.area}`,
-                    coordinates: { latitude: 23.03, longitude: 72.58 }, // Default Ahmedabad coordinates
-                    geofenceRadius: 50,
-                    estimatedTime: 10,
-                    order: 1,
-                    requirements: {},
-                    isActive: true
-                  }
-                ],
-                isActive: true,
-                createdBy: officers[0]._id,
-                notes: `Auto-created for incident: ${incident.title}`
-              });
-              patrolRoutes.push(newRoute);
-              newlyCreatedRoutes.push({
-                route: newRoute,
-                incident: incident,
-                reason: 'Created new route for incident area'
-              });
-            }
+            
+            // Always create a new route for this area (ignore existing routes)
+            const newRoute = await PatrolRoute.create({
+              name: `Incident Response: ${incident.area}`,
+              description: `Auto-generated route for incident at ${incident.area}`,
+              checkpoints: [
+                {
+                  name: incident.area,
+                  description: `Incident location: ${incident.area}`,
+                  coordinates: { latitude: 23.03, longitude: 72.58 }, // Default Ahmedabad coordinates
+                  geofenceRadius: 50,
+                  estimatedTime: 10,
+                  order: 1,
+                  requirements: {},
+                  isActive: true
+                }
+              ],
+              isActive: true,
+              createdBy: officers[0]._id,
+              notes: `Auto-created for incident: ${incident.title}`
+            });
+            patrolRoutes.push(newRoute);
+            newlyCreatedRoutes.push({
+              route: newRoute,
+              incident: incident,
+              reason: 'Created new route for incident area'
+            });
           }
         }
       }
