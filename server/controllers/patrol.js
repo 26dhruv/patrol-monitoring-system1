@@ -781,38 +781,117 @@ exports.getActivePatrols = async (req, res, next) => {
   }
 };
 
-// @desc    Track officer location and append to patrolPath
-// @route   POST /api/patrol/:id/track
+// @desc    Track officer location and auto-complete when near destination
+// @route   GET /api/patrol/:id/track
 // @access  Private (Officer assigned to patrol)
 exports.trackPatrolLocation = async (req, res, next) => {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude } = req.query;
     const patrolId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId.toString(); // Convert to string
 
     if (!latitude || !longitude) {
-      return res.status(400).json({ success: false, error: 'Latitude and longitude are required.' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Latitude and longitude are required as query parameters.' 
+      });
     }
 
     // Find patrol and check if officer is assigned
-    const patrol = await Patrol.findById(patrolId);
+    const patrol = await Patrol.findById(patrolId).populate('patrolRoute');
     if (!patrol) {
       return res.status(404).json({ success: false, error: 'Patrol not found.' });
     }
-    if (!patrol.assignedOfficers.map(id => id.toString()).includes(userId)) {
+
+    const assignedOfficerIds = patrol.assignedOfficers.map(id => id.toString());
+    const isAssigned = assignedOfficerIds.includes(userId);
+
+    if (!isAssigned) {
       return res.status(403).json({ success: false, error: 'You are not assigned to this patrol.' });
     }
 
     // Append location to patrolPath
-    patrol.patrolPath.push({ latitude, longitude, timestamp: new Date() });
+    patrol.patrolPath.push({ 
+      latitude: parseFloat(latitude), 
+      longitude: parseFloat(longitude), 
+      timestamp: new Date() 
+    });
+
+    // Check if user is near destination (last checkpoint)
+    if (patrol.patrolRoute && patrol.patrolRoute.checkpoints && patrol.patrolRoute.checkpoints.length > 0) {
+      const destination = patrol.patrolRoute.checkpoints[patrol.patrolRoute.checkpoints.length - 1];
+      const destLat = destination.coordinates.latitude;
+      const destLng = destination.coordinates.longitude;
+      const geofenceRadius = destination.geofenceRadius || 50; // Default 50 meters
+
+      // Calculate distance using Haversine formula
+      const distance = calculateDistance(
+        parseFloat(latitude), 
+        parseFloat(longitude), 
+        destLat, 
+        destLng
+      );
+
+      // Check if user is within geofence radius
+      if (distance <= geofenceRadius) {
+        // User reached destination - complete patrol
+        patrol.status = 'completed';
+        patrol.actualEndTime = new Date();
+        await patrol.save();
+
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Destination reached. Patrol completed.',
+          data: {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date(),
+            isNearDestination: true,
+            distance: Math.round(distance),
+            geofenceRadius,
+            shouldStopTracking: true,
+            patrolCompleted: true
+          }
+        });
+      }
+    }
+
+    // User not near destination - continue tracking
     await patrol.save();
 
-    res.status(200).json({ success: true, message: 'Location tracked.', data: patrol.patrolPath });
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Location tracked.',
+      data: {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        timestamp: new Date(),
+        isNearDestination: false,
+        shouldStopTracking: false,
+        patrolCompleted: false
+      }
+    });
   } catch (error) {
     console.error('Error tracking patrol location:', error);
     res.status(500).json({ success: false, error: 'Server error.' });
   }
 };
+
+// Helper function to calculate distance between two points using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
 
 // @desc    Update patrol status
 // @route   PATCH /api/patrol/:id/status

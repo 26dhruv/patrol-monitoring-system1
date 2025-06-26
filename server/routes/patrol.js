@@ -201,6 +201,6 @@ router.post('/:id/checkpoint/:checkpointId', authorizeRoles('officer'), complete
 router.patch('/:id/status', updatePatrolStatus);
 router.put('/:id', authorizeRoles('admin', 'manager'), updatePatrol);
 router.delete('/:id', authorizeRoles('admin', 'manager'), deletePatrol);
-router.post('/:id/track', trackPatrolLocation);
+router.get('/:id/track', trackPatrolLocation);
 
 module.exports = router; 
