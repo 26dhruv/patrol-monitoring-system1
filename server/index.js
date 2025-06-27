@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 const errorHandlerMiddleware = require('./middleware/error-handler');
 const PatrolStatusManager = require('./services/patrolStatusManager');
 
@@ -46,10 +47,20 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/ai-scheduler', aiSchedulerRoutes);
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Patrol Monitoring System API is running');
-});
+// Serve static files from the React app build directory
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+  });
+} else {
+  // Root route for development
+  app.get('/', (req, res) => {
+    res.send('Patrol Monitoring System API is running');
+  });
+}
 
 // Error handler middleware
 app.use(errorHandlerMiddleware);

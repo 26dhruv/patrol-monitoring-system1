@@ -509,77 +509,138 @@ class AIScheduler {
         throw new Error('No officers available for the requested time period. All officers have conflicting patrols.');
       }
 
-      // Assign routes to officers using available time slots
+      // Assign routes to officers using round-robin and priority-based distribution
       const assignments = [];
       const totalRoutesToAssign = Math.min(routeScores.length, maxRoutes);
       
+      // If we have more officers than routes, assign multiple officers to high-priority routes
+      // If we have more routes than officers, distribute routes among officers
+      const officersPerRoute = Math.max(1, Math.ceil(availableOfficersData.length / Math.max(totalRoutesToAssign, 1)));
+      const routesPerOfficer = Math.max(1, Math.ceil(totalRoutesToAssign / availableOfficersData.length));
+      
+      // Track assignments per officer to ensure fair distribution
+      const officerAssignmentCount = new Map();
+      availableOfficersData.forEach(od => officerAssignmentCount.set(od.officer._id.toString(), 0));
+      
+      // Sort officers by workload (least busy first)
+      const sortedOfficersData = [...availableOfficersData].sort((a, b) => a.workloadScore - b.workloadScore);
+      
       for (let i = 0; i < totalRoutesToAssign; i++) {
         const routeScore = routeScores[i];
+        const routeOfficers = [];
         
-        // Find the best available officer for this route
-        let bestOfficer = null;
-        let bestTimeSlot = null;
-        let bestScore = -1;
-
-        for (const officerData of availableOfficersData) {
-          // Check if this officer has any available time slots
-          for (const timeSlot of officerData.availableTimeSlots) {
-            // Calculate if this route can fit in the time slot
-            const routeDuration = routeScore.efficiency.estimatedDuration || 60;
-            const slotDuration = timeSlot.end.getTime() - timeSlot.start.getTime();
+        // For high-priority routes (top 30%), try to assign multiple officers if available
+        const isHighPriority = i < Math.ceil(totalRoutesToAssign * 0.3);
+        const maxOfficersForRoute = isHighPriority ? Math.min(officersPerRoute, 2) : 1;
+        
+        // Find available officers for this route
+        for (let officerIndex = 0; officerIndex < maxOfficersForRoute && routeOfficers.length < maxOfficersForRoute; officerIndex++) {
+          let bestOfficer = null;
+          let bestTimeSlot = null;
+          let bestScore = -1;
+          
+          for (const officerData of sortedOfficersData) {
+            const officerId = officerData.officer._id.toString();
+            const currentAssignments = officerAssignmentCount.get(officerId);
             
-            if (slotDuration >= routeDuration * 60 * 1000) { // Convert minutes to milliseconds
-              // Calculate assignment score based on officer workload and route priority
-              const assignmentScore = routeScore.score * (1 - officerData.workloadScore * 0.1);
+            // Skip if officer already has too many assignments (load balancing)
+            if (currentAssignments >= routesPerOfficer && availableOfficersData.length > totalRoutesToAssign) {
+              continue;
+            }
+            
+            // Skip if officer is already assigned to this route
+            if (routeOfficers.some(ro => ro.officer._id.toString() === officerId)) {
+              continue;
+            }
+            
+            // Check if this officer has any available time slots
+            for (const timeSlot of officerData.availableTimeSlots) {
+              // Calculate if this route can fit in the time slot
+              const routeDuration = routeScore.efficiency.estimatedDuration || 60;
+              const slotDuration = timeSlot.end.getTime() - timeSlot.start.getTime();
               
-              if (assignmentScore > bestScore) {
-                bestScore = assignmentScore;
-                bestOfficer = officerData.officer;
-                bestTimeSlot = timeSlot;
+              if (slotDuration >= routeDuration * 60 * 1000) { // Convert minutes to milliseconds
+                // Calculate assignment score based on route priority and officer workload
+                // Favor officers with fewer current assignments
+                const workloadPenalty = currentAssignments * 0.1;
+                const assignmentScore = routeScore.score * (1 - officerData.workloadScore * 0.1 - workloadPenalty);
+                
+                if (assignmentScore > bestScore) {
+                  bestScore = assignmentScore;
+                  bestOfficer = officerData.officer;
+                  bestTimeSlot = timeSlot;
+                }
               }
             }
           }
-        }
+          
+          if (bestOfficer && bestTimeSlot) {
+            // Calculate actual start and end times for this assignment
+            const routeDuration = routeScore.efficiency.estimatedDuration || 60;
+            const assignmentStartTime = new Date(bestTimeSlot.start);
+            const assignmentEndTime = new Date(bestTimeSlot.start.getTime() + routeDuration * 60 * 1000);
 
-        if (bestOfficer && bestTimeSlot) {
-          // Calculate actual start and end times for this assignment
-          const routeDuration = routeScore.efficiency.estimatedDuration || 60;
-          const assignmentStartTime = new Date(bestTimeSlot.start);
-          const assignmentEndTime = new Date(bestTimeSlot.start.getTime() + routeDuration * 60 * 1000);
+            routeOfficers.push({
+              officer: bestOfficer,
+              score: bestScore,
+              startTime: assignmentStartTime,
+              endTime: assignmentEndTime,
+              timeSlot: bestTimeSlot
+            });
 
-          assignments.push({
-            route: routeScore.route,
-            officer: bestOfficer,
-            score: bestScore,
-            incidentPriority: routeScore.incidentPriority,
-            efficiency: routeScore.efficiency,
-            startTime: assignmentStartTime,
-            endTime: assignmentEndTime,
-            timeSlot: bestTimeSlot
-          });
+            // Update officer assignment count
+            const officerId = bestOfficer._id.toString();
+            officerAssignmentCount.set(officerId, officerAssignmentCount.get(officerId) + 1);
 
-          // Update the officer's available time slots by removing the used time
-          const officerData = availableOfficersData.find(o => o.officer._id.toString() === bestOfficer._id.toString());
-          if (officerData) {
-            // Remove the used time slot and add remaining time if any
-            const remainingTime = bestTimeSlot.end.getTime() - assignmentEndTime.getTime();
-            if (remainingTime >= 30 * 60 * 1000) { // At least 30 minutes remaining
-              officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
-              officerData.availableTimeSlots.push({
-                start: assignmentEndTime,
-                end: bestTimeSlot.end
-              });
-            } else {
-              // Remove the entire time slot if not enough time remaining
-              officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
+            // Update the officer's available time slots
+            const officerData = sortedOfficersData.find(o => o.officer._id.toString() === officerId);
+            if (officerData) {
+              // Remove the used time slot and add remaining time if any
+              const remainingTime = bestTimeSlot.end.getTime() - assignmentEndTime.getTime();
+              if (remainingTime >= 30 * 60 * 1000) { // At least 30 minutes remaining
+                officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
+                officerData.availableTimeSlots.push({
+                  start: assignmentEndTime,
+                  end: bestTimeSlot.end
+                });
+              } else {
+                // Remove the entire time slot if not enough time remaining
+                officerData.availableTimeSlots = officerData.availableTimeSlots.filter(slot => slot !== bestTimeSlot);
+              }
+              
+              // Check if officer still has available time
+              officerData.isAvailable = officerData.availableTimeSlots.length > 0;
             }
-            
-            // Check if officer still has available time
-            officerData.isAvailable = officerData.availableTimeSlots.length > 0;
+          }
+        }
+        
+        // Create assignment(s) for this route
+        if (routeOfficers.length > 0) {
+          // If multiple officers assigned to same route, create separate assignments
+          // but mark them as coordinated patrols
+          for (const routeOfficer of routeOfficers) {
+            assignments.push({
+              route: routeScore.route,
+              officer: routeOfficer.officer,
+              assignedOfficers: routeOfficers.map(ro => ro.officer), // All officers assigned to this route
+              score: routeOfficer.score,
+              incidentPriority: routeScore.incidentPriority,
+              efficiency: routeScore.efficiency,
+              startTime: routeOfficer.startTime,
+              endTime: routeOfficer.endTime,
+              timeSlot: routeOfficer.timeSlot,
+              isCoordinatedPatrol: routeOfficers.length > 1,
+              coordinatedWith: routeOfficers.filter(ro => ro.officer._id.toString() !== routeOfficer.officer._id.toString()).map(ro => ro.officer)
+            });
           }
         }
       }
 
+      // Calculate distribution statistics
+      const uniqueOfficers = new Set(assignments.map(a => a.officer._id.toString()));
+      const uniqueRoutes = new Set(assignments.map(a => a.route._id.toString()));
+      const coordinatedPatrols = assignments.filter(a => a.isCoordinatedPatrol).length;
+      
       return {
         success: true,
         data: {
@@ -587,12 +648,20 @@ class AIScheduler {
           newlyCreatedRoutes,
           summary: {
             totalAssignments: assignments.length,
+            uniqueRoutes: uniqueRoutes.size,
+            uniqueOfficers: uniqueOfficers.size,
             totalRoutes: patrolRoutes.length,
             totalOfficers: officers.length,
-            coverage: assignments.length / Math.min(patrolRoutes.length, maxRoutes) * 100,
+            availableOfficers: availableOfficersData.length,
+            coverage: uniqueRoutes.size / Math.min(patrolRoutes.length, maxRoutes) * 100,
+            officerUtilization: uniqueOfficers.size / officers.length * 100,
             averageScore: assignments.length > 0 ? 
               assignments.reduce((sum, a) => sum + (a.score || 0), 0) / assignments.length : 0,
-            routesCreated: newlyCreatedRoutes.length
+            coordinatedPatrols: coordinatedPatrols,
+            routesCreated: newlyCreatedRoutes.length,
+            distributionStrategy: availableOfficersData.length > totalRoutesToAssign ? 
+              'Multiple officers per route (enhanced coverage)' : 
+              'Multiple routes per officer (load distribution)'
           }
         }
       };

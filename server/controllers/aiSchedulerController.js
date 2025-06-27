@@ -41,19 +41,51 @@ exports.generatePatrolAssignments = async (req, res, next) => {
     if (autoCreate && result.data.assignments.length > 0) {
       const createdPatrols = [];
       
+      // Group assignments by route to avoid duplicate patrols for the same route
+      const patrolsByRoute = new Map();
+      
       for (const assignment of result.data.assignments) {
-        try {
-          const patrol = await Patrol.create({
-            title: `AI Patrol - ${assignment.route.name}`,
-            description: `AI-generated patrol assignment for ${assignment.route.name}. Priority score: ${assignment.score.toFixed(2)}`,
-            assignedOfficers: [assignment.officer._id],
-            assignedBy: req.user.userId,
-            patrolRoute: assignment.route._id,
+        const routeId = assignment.route._id.toString();
+        
+        if (!patrolsByRoute.has(routeId)) {
+          // Create new patrol for this route
+          patrolsByRoute.set(routeId, {
+            route: assignment.route,
+            officers: [assignment.officer],
+            assignments: [assignment],
             startTime: assignment.startTime,
             endTime: assignment.endTime,
+            maxScore: assignment.score,
+            totalIncidents: assignment.incidentPriority.incidentCount,
+            efficiency: assignment.efficiency
+          });
+        } else {
+          // Add officer to existing patrol
+          const patrol = patrolsByRoute.get(routeId);
+          patrol.officers.push(assignment.officer);
+          patrol.assignments.push(assignment);
+          patrol.maxScore = Math.max(patrol.maxScore, assignment.score);
+          patrol.totalIncidents += assignment.incidentPriority.incidentCount;
+        }
+      }
+      
+      // Create patrols in database
+      for (const [routeId, patrolData] of patrolsByRoute) {
+        try {
+          const officerNames = patrolData.officers.map(o => o.name).join(', ');
+          const isCoordinatedPatrol = patrolData.officers.length > 1;
+          
+          const patrol = await Patrol.create({
+            title: `AI Patrol - ${patrolData.route.name}${isCoordinatedPatrol ? ' (Team Patrol)' : ''}`,
+            description: `AI-generated patrol assignment for ${patrolData.route.name}. Priority score: ${patrolData.maxScore.toFixed(2)}. ${isCoordinatedPatrol ? `Coordinated team patrol with ${patrolData.officers.length} officers: ${officerNames}` : `Assigned to: ${officerNames}`}`,
+            assignedOfficers: patrolData.officers.map(o => o._id),
+            assignedBy: req.user.userId,
+            patrolRoute: patrolData.route._id,
+            startTime: patrolData.startTime,
+            endTime: patrolData.endTime,
             status: 'scheduled',
-            priority: assignment.incidentPriority.incidentCount > 0 ? 'high' : 'medium',
-            notes: `Incidents nearby: ${assignment.incidentPriority.incidentCount}, Route efficiency: ${assignment.efficiency.efficiency.toFixed(2)}`
+            priority: patrolData.totalIncidents > 0 ? 'high' : 'medium',
+            notes: `Officers: ${officerNames}. Incidents nearby: ${patrolData.totalIncidents}, Route efficiency: ${patrolData.efficiency.efficiency.toFixed(2)}${isCoordinatedPatrol ? '. Team patrol for enhanced coverage.' : ''}`
           });
           createdPatrols.push(patrol);
         } catch (error) {
